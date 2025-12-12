@@ -52,15 +52,17 @@ class EvalCompatEnv:
         """
         self._env = env
         self._waypoint_command = None
+        # Store reference to self on the underlying env for adapter discovery
+        self._env.unwrapped._eval_compat_wrapper = self
     
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to the wrapped environment."""
         return getattr(self._env, name)
     
     @property
-    def unwrapped(self) -> "EvalCompatEnv":
-        """Return self as the unwrapped environment (for adapter compatibility)."""
-        return self
+    def unwrapped(self):
+        """Return the actual unwrapped environment (for RslRlVecEnvWrapper compatibility)."""
+        return self._env.unwrapped
     
     @property
     def _waypoint_term(self):
@@ -133,23 +135,25 @@ class EvalCompatEnv:
         """Number of active waypoints per environment.
         
         Shape: (num_envs,)
+        Returns the per-environment waypoint count from the waypoint command term.
         """
         if self._waypoint_term is not None:
-            num_wp = self._waypoint_term.cfg.num_waypoints
-            return torch.full(
-                (self._env.num_envs,), 
-                num_wp, 
-                dtype=torch.long, 
-                device=self.device
-            )
+            # Return the per-environment waypoint count tensor
+            return self._waypoint_term.num_waypoints_per_env
         return torch.ones(self._env.num_envs, dtype=torch.long, device=self.device)
     
     @_num_waypoints.setter
-    def _num_waypoints(self, value: torch.Tensor):
-        """Allow setting per-environment waypoint counts (for variable waypoint scenarios)."""
-        # Note: The current implementation uses fixed num_waypoints from config
-        # To support variable waypoints, the waypoint command would need modification
-        pass
+    def _num_waypoints(self, value: torch.Tensor | int):
+        """Set per-environment waypoint counts (for variable waypoint scenarios).
+        
+        Args:
+            value: Either a tensor of per-env counts, or a single int to set for all envs.
+        """
+        if self._waypoint_term is not None:
+            if isinstance(value, int):
+                self._waypoint_term.num_waypoints_per_env[:] = value
+            else:
+                self._waypoint_term.num_waypoints_per_env[:] = value
     
     @property
     def _num_goals(self) -> int:
