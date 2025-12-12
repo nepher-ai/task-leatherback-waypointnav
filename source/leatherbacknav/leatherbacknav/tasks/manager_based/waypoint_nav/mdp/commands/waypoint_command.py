@@ -82,6 +82,12 @@ class WaypointCommand(CommandTerm):
             self.num_envs, dtype=torch.bool, device=self.device
         )
         
+        # Per-environment waypoint count (for evaluation with variable waypoint scenarios)
+        # Defaults to cfg.num_waypoints, can be overridden via set_num_waypoints() or _num_waypoints setter
+        self.num_waypoints_per_env = torch.full(
+            (self.num_envs,), cfg.num_waypoints, dtype=torch.long, device=self.device
+        )
+        
         # Command output: waypoints in robot's base frame
         # Shape: (num_envs, total_waypoints_tracked * 3)
         # Contains [current_wp_x, current_wp_y, current_wp_z, next_wp_x, next_wp_y, next_wp_z, ...]
@@ -151,6 +157,19 @@ class WaypointCommand(CommandTerm):
         in the robot's local frame.
         """
         return self.waypoints_b
+
+    def set_num_waypoints(self, env_idx: int, num_waypoints: int) -> None:
+        """Set the number of active waypoints for a specific environment.
+        
+        Use this for evaluation scenarios with variable waypoint counts.
+        The count is clamped to [1, cfg.num_waypoints].
+        
+        Args:
+            env_idx: Index of the environment to configure.
+            num_waypoints: Number of waypoints for this environment.
+        """
+        clamped = max(1, min(num_waypoints, self.cfg.num_waypoints))
+        self.num_waypoints_per_env[env_idx] = clamped
 
     """
     Implementation specific functions.
@@ -235,6 +254,8 @@ class WaypointCommand(CommandTerm):
         # Reset waypoint index and flags
         self.current_waypoint_idx[env_ids] = 0
         self.all_waypoints_reached[env_ids] = False
+        # Reset per-env waypoint count to default (config value)
+        self.num_waypoints_per_env[env_ids] = self.cfg.num_waypoints
         
         # Pre-sample scenario indices for non-per-waypoint mode
         if self._use_scenarios and not self.cfg.per_waypoint_spacing:
@@ -335,22 +356,26 @@ class WaypointCommand(CommandTerm):
         
         # Check which environments have reached their current waypoint
         reached_mask = distance_to_current < self.cfg.waypoint_reach_threshold
-        # Only advance if not already at the last waypoint
-        can_advance = self.current_waypoint_idx < self.cfg.num_waypoints - 1
+        # Only advance if not already at the last waypoint (use per-env count)
+        can_advance = self.current_waypoint_idx < self.num_waypoints_per_env - 1
         should_advance = reached_mask & can_advance
         
         # Advance waypoint index
         self.current_waypoint_idx[should_advance] += 1
         
-        # Check if all waypoints reached
-        current_wp_indices_after = self.current_waypoint_idx.clamp(max=self.cfg.num_waypoints - 1)
+        # Check if all waypoints reached (use per-env count for completion check)
+        current_wp_indices_after = torch.min(
+            self.current_waypoint_idx, 
+            self.num_waypoints_per_env - 1
+        )
         current_waypoints_after = self.waypoints_w[
             torch.arange(self.num_envs, device=self.device), current_wp_indices_after
         ]
         distance_to_current_after = torch.norm(current_waypoints_after[:, :2] - robot_pos_w[:, :2], dim=1)
         reached_current_after = distance_to_current_after < self.cfg.waypoint_reach_threshold
         
-        at_last_waypoint = self.current_waypoint_idx >= self.cfg.num_waypoints - 1
+        # Use per-environment waypoint count for completion check
+        at_last_waypoint = self.current_waypoint_idx >= self.num_waypoints_per_env - 1
         self.all_waypoints_reached = at_last_waypoint & reached_current_after
 
         # Transform waypoints to robot's local frame

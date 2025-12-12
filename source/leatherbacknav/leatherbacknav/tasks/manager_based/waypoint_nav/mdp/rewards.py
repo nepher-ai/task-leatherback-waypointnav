@@ -3,27 +3,18 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Custom reward functions for Leatherback waypoint navigation task.
-
-These reward functions encourage the wheeled robot to navigate through waypoints
-while maintaining stable driving behavior.
-"""
+"""Custom reward functions for Leatherback waypoint navigation task."""
 
 from __future__ import annotations
 
 import torch
 from typing import TYPE_CHECKING
 
-from isaaclab.assets import Articulation, RigidObject
+from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
-
-
-##
-# Waypoint Navigation Rewards
-##
 
 
 def waypoint_reached_bonus(
@@ -31,28 +22,11 @@ def waypoint_reached_bonus(
     command_name: str = "waypoints",
     bonus: float = 10.0,
 ) -> torch.Tensor:
-    """Bonus reward when a waypoint is reached.
-    
-    Provides a large positive reward when the robot reaches within the threshold
-    distance of the current waypoint and advances to the next one.
-    Uses 2D distance for waypoint reach detection (appropriate for ground vehicles).
-    
-    Args:
-        env: The environment instance.
-        command_name: Name of the waypoint command term. Defaults to "waypoints".
-        bonus: Bonus reward value. Defaults to 10.0.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the reward.
-    """
+    """Bonus reward when a waypoint is reached."""
     waypoint_term = env.command_manager.get_term(command_name)
-    
-    # Get current waypoint in robot frame (x, y for 2D distance)
     waypoint_cmd = env.command_manager.get_command(command_name)
-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D navigation
+    current_wp_b = waypoint_cmd[:, :2]
     distance = torch.norm(current_wp_b, dim=1)
-    
-    # Reward when within threshold
     reached = distance < waypoint_term.cfg.waypoint_reach_threshold
     return reached.float() * bonus
 
@@ -62,22 +36,10 @@ def waypoint_distance_reward(
     command_name: str = "waypoints",
     std: float = 2.0,
 ) -> torch.Tensor:
-    """Reward for being close to the current waypoint using exponential kernel.
-    
-    Uses an exponential decay based on 2D distance: exp(-distance / std)
-    
-    Args:
-        env: The environment instance.
-        command_name: Name of the waypoint command term. Defaults to "waypoints".
-        std: Standard deviation for exponential kernel. Defaults to 2.0.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the reward.
-    """
+    """Reward for being close to the waypoint: exp(-distance / std)."""
     waypoint_cmd = env.command_manager.get_command(command_name)
-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D distance
+    current_wp_b = waypoint_cmd[:, :2]
     distance = torch.norm(current_wp_b, dim=1)
-    
     return torch.exp(-distance / std)
 
 
@@ -86,65 +48,11 @@ def waypoint_heading_reward(
     command_name: str = "waypoints",
     std: float = 0.5,
 ) -> torch.Tensor:
-    """Reward for facing towards the current waypoint using exponential kernel.
-    
-    Encourages the robot to orient itself towards the waypoint (yaw heading).
-    
-    Args:
-        env: The environment instance.
-        command_name: Name of the waypoint command term. Defaults to "waypoints".
-        std: Standard deviation for exponential kernel. Defaults to 0.5.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the reward.
-    """
+    """Reward for facing towards the current waypoint."""
     waypoint_cmd = env.command_manager.get_command(command_name)
-    current_wp_b = waypoint_cmd[:, :2]  # x, y for yaw heading
-    
-    # Heading error (yaw angle to waypoint in robot frame)
+    current_wp_b = waypoint_cmd[:, :2]
     heading_error = torch.abs(torch.atan2(current_wp_b[:, 1], current_wp_b[:, 0]))
-    
     return torch.exp(-heading_error / std)
-
-
-def forward_velocity_reward(
-    env: ManagerBasedRLEnv,
-    command_name: str = "waypoints",
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    target_velocity: float = 1.0,
-    std: float = 0.5,
-) -> torch.Tensor:
-    """Reward for moving towards the waypoint.
-    
-    Encourages the robot to move in the direction of the waypoint.
-    
-    Args:
-        env: The environment instance.
-        command_name: Name of the waypoint command term. Defaults to "waypoints".
-        asset_cfg: Configuration for the robot asset.
-        target_velocity: Target velocity when heading towards waypoint. Defaults to 1.0.
-        std: Standard deviation for exponential kernel. Defaults to 0.5.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the reward.
-    """
-    asset: RigidObject = env.scene[asset_cfg.name]
-    waypoint_cmd = env.command_manager.get_command(command_name)
-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D direction
-    
-    # Compute desired velocity direction (normalized 2D waypoint direction)
-    wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
-    wp_direction = current_wp_b / wp_distance
-    
-    # Get robot's velocity in base frame (2D horizontal)
-    vel_b = asset.data.root_lin_vel_b[:, :2]
-    
-    # Project velocity onto waypoint direction (2D dot product)
-    velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
-    
-    # Reward tracking target velocity towards waypoint
-    vel_error = torch.abs(velocity_towards_wp - target_velocity)
-    return torch.exp(-vel_error / std)
 
 
 def progress_reward(
@@ -154,83 +62,78 @@ def progress_reward(
 ) -> torch.Tensor:
     """Reward for making progress towards the current waypoint.
     
-    This is computed as the velocity component in the direction of the waypoint,
-    rewarding the robot for getting closer.
+    Uses DELTA-based reward: (previous_distance - current_distance).
+    This directly rewards reducing distance to waypoint, matching original Leatherback.
     
-    Args:
-        env: The environment instance.
-        command_name: Name of the waypoint command term. Defaults to "waypoints".
-        asset_cfg: Configuration for the robot asset.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the reward (positive when getting closer).
+    Handles waypoint transitions by tracking the waypoint index and resetting
+    the previous distance when a new waypoint becomes active.
     """
-    asset: RigidObject = env.scene[asset_cfg.name]
+    waypoint_term = env.command_manager.get_term(command_name)
     waypoint_cmd = env.command_manager.get_command(command_name)
-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D progress
+    current_wp_b = waypoint_cmd[:, :2]
+    current_distance = torch.norm(current_wp_b, dim=1)
     
-    # Compute direction to waypoint (normalized 2D)
-    wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
-    wp_direction = current_wp_b / wp_distance
+    # Get or initialize tracking buffers
+    dist_key = f"_prev_waypoint_distance_{command_name}"
+    idx_key = f"_prev_waypoint_index_{command_name}"
     
-    # Get robot's velocity in base frame (2D horizontal)
-    vel_b = asset.data.root_lin_vel_b[:, :2]
+    if not hasattr(env, dist_key):
+        setattr(env, dist_key, current_distance.clone())
+        setattr(env, idx_key, waypoint_term.current_waypoint_idx.clone())
     
-    # Velocity component towards waypoint (positive means getting closer)
-    velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
+    prev_distance = getattr(env, dist_key)
+    prev_waypoint_idx = getattr(env, idx_key)
+    current_waypoint_idx = waypoint_term.current_waypoint_idx
     
-    # Clip to avoid large negative rewards when moving away
-    return torch.clamp(velocity_towards_wp, min=-0.5)
-
-
-##
-# Wheeled Robot Regularization Penalties
-##
+    # Detect waypoint transitions (index changed)
+    waypoint_changed = current_waypoint_idx != prev_waypoint_idx
+    
+    # Delta-based progress: positive when distance decreases (moving closer)
+    # When waypoint changes, use 0 progress (the waypoint_reached bonus handles that)
+    progress = torch.where(
+        waypoint_changed,
+        torch.zeros_like(current_distance),  # No progress penalty when waypoint changes
+        prev_distance - current_distance     # Normal delta-based progress
+    )
+    
+    # Update tracking buffers for next step
+    setattr(env, dist_key, current_distance.clone())
+    setattr(env, idx_key, current_waypoint_idx.clone())
+    
+    return progress
 
 
 def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Penalize large instantaneous changes in the network action output.
-    
-    This encourages smooth steering and throttle control.
-    """
+    """Penalize large changes in action output for smooth control."""
     return torch.linalg.norm((env.action_manager.action - env.action_manager.prev_action), dim=1)
 
 
-def base_motion_penalty(
+def alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Constant reward per step (use negative weight for time penalty)."""
+    return torch.ones(env.num_envs, device=env.device)
+
+
+def forward_velocity_reward(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
-    """Penalize base vertical and roll/pitch velocity.
+    """Reward for moving forward in the robot's body frame.
     
-    Encourages the wheeled robot to maintain stable driving without bouncing.
+    This prevents the robot from learning to drive backward.
     """
     asset: RigidObject = env.scene[asset_cfg.name]
-    return 0.8 * torch.square(asset.data.root_lin_vel_b[:, 2]) + 0.2 * torch.sum(
-        torch.abs(asset.data.root_ang_vel_b[:, :2]), dim=1
-    )
+    # Forward velocity in body frame (x-axis is forward)
+    forward_vel = asset.data.root_lin_vel_b[:, 0]
+    # Reward forward, penalize backward
+    return forward_vel
 
 
-def steering_penalty(
+def backward_penalty(
     env: ManagerBasedRLEnv,
-    steering_action_index: int = 1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
-    """Penalize excessive steering angle.
-    
-    Encourages the robot to drive more straight when possible.
-    
-    Args:
-        env: The environment instance.
-        steering_action_index: Index of steering in the action vector. Defaults to 1.
-        
-    Returns:
-        Tensor of shape (num_envs,) containing the penalty.
-    """
-    # Get steering action (assuming action format is [throttle, steering])
-    steering = env.action_manager.action[:, steering_action_index]
-    return torch.square(steering)
-
-
-def alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Constant reward for staying alive (not terminated)."""
-    return torch.ones(env.num_envs, device=env.device)
-
+    """Penalty for moving backward in the robot's body frame."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    forward_vel = asset.data.root_lin_vel_b[:, 0]
+    # Only return negative values (backward motion), clamped to 0 otherwise
+    return torch.clamp(forward_vel, max=0.0)

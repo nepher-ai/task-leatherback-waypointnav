@@ -13,3 +13,8 @@ from .tasks import *
 # Register UI extensions.
 from .ui_extension_example import *
 
+# Export evaluation compatibility utilities for wheeled-waypoint-eval
+from .tasks.manager_based.waypoint_nav.eval_compat import EvalCompatEnv, wrap_for_eval
+
+__all__ = ["EvalCompatEnv", "wrap_for_eval"]
+

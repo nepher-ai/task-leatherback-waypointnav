@@ -34,7 +34,7 @@ LEATHERBACK_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.05),
+        pos=(0.0, 0.0, 0.05),  # Match original height to prevent ground penetration
         joint_pos={
             "Wheel__Knuckle__Front_Left": 0.0,
             "Wheel__Knuckle__Front_Right": 0.0,
