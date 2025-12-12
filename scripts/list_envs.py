@@ -5,6 +5,17 @@
 
 """Script to list all registered environments in leatherbacknav."""
 
+"""Launch Isaac Sim Simulator first."""
+
+from isaaclab.app import AppLauncher
+
+# launch omniverse app
+app_launcher = AppLauncher(headless=True)
+simulation_app = app_launcher.app
+
+
+"""Rest everything follows."""
+
 import gymnasium as gym
 
 # Import leatherbacknav to register environments
@@ -34,5 +45,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        # run the main function
+        main()
+    except Exception as e:
+        raise e
+    finally:
+        # close the app
+        simulation_app.close()
 

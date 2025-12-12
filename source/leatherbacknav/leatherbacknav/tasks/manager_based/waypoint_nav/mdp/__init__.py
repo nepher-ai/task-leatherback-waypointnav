@@ -43,16 +43,11 @@ from .observations import (
 
 # Import custom rewards
 from .rewards import (
-    # Waypoint navigation rewards
     waypoint_reached_bonus,
     waypoint_distance_reward,
     waypoint_heading_reward,
-    forward_velocity_reward,
     progress_reward,
-    # Wheeled robot regularization penalties
     action_smoothness_penalty,
-    base_motion_penalty,
-    steering_penalty,
     alive_reward,
 )
 
@@ -100,11 +95,8 @@ __all__ = [
     "waypoint_reached_bonus",
     "waypoint_distance_reward",
     "waypoint_heading_reward",
-    "forward_velocity_reward",
     "progress_reward",
     "action_smoothness_penalty",
-    "base_motion_penalty",
-    "steering_penalty",
     "alive_reward",
     # Custom Terminations
     "all_waypoints_reached",

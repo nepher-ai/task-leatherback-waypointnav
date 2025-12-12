@@ -1,0 +1,610 @@
+--- git status ---
+On branch waypoint
+Your branch is up to date with 'origin/waypoint'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   scripts/list_envs.py
+	modified:   source/leatherbacknav/leatherbacknav/robots/leatherback.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/
+	outputs/
+	scripts/rsl_rl/__pycache__/
+	source/leatherbacknav/leatherbacknav.egg-info/
+	source/leatherbacknav/leatherbacknav/__pycache__/
+	source/leatherbacknav/leatherbacknav/robots/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/agents/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/commands/__pycache__/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/scripts/list_envs.py b/scripts/list_envs.py
+index f495e35..46cda6d 100644
+--- a/scripts/list_envs.py
++++ b/scripts/list_envs.py
+@@ -5,6 +5,17 @@
+ 
+ """Script to list all registered environments in leatherbacknav."""
+ 
++"""Launch Isaac Sim Simulator first."""
++
++from isaaclab.app import AppLauncher
++
++# launch omniverse app
++app_launcher = AppLauncher(headless=True)
++simulation_app = app_launcher.app
++
++
++"""Rest everything follows."""
++
+ import gymnasium as gym
+ 
+ # Import leatherbacknav to register environments
+@@ -34,5 +45,12 @@ def main():
+ 
+ 
+ if __name__ == "__main__":
+-    main()
++    try:
++        # run the main function
++        main()
++    except Exception as e:
++        raise e
++    finally:
++        # close the app
++        simulation_app.close()
+ 
+diff --git a/source/leatherbacknav/leatherbacknav/robots/leatherback.py b/source/leatherbacknav/leatherbacknav/robots/leatherback.py
+index 70953cd..32b5151 100644
+--- a/source/leatherbacknav/leatherbacknav/robots/leatherback.py
++++ b/source/leatherbacknav/leatherbacknav/robots/leatherback.py
+@@ -34,7 +34,7 @@ LEATHERBACK_CFG = ArticulationCfg(
+         ),
+     ),
+     init_state=ArticulationCfg.InitialStateCfg(
+-        pos=(0.0, 0.0, 0.05),
++        pos=(0.0, 0.0, 0.05),  # Match original height to prevent ground penetration
+         joint_pos={
+             "Wheel__Knuckle__Front_Left": 0.0,
+             "Wheel__Knuckle__Front_Right": 0.0,
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+index f34cff5..064cf67 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+@@ -43,16 +43,11 @@ from .observations import (
+ 
+ # Import custom rewards
+ from .rewards import (
+-    # Waypoint navigation rewards
+     waypoint_reached_bonus,
+     waypoint_distance_reward,
+     waypoint_heading_reward,
+-    forward_velocity_reward,
+     progress_reward,
+-    # Wheeled robot regularization penalties
+     action_smoothness_penalty,
+-    base_motion_penalty,
+-    steering_penalty,
+     alive_reward,
+ )
+ 
+@@ -100,11 +95,8 @@ __all__ = [
+     "waypoint_reached_bonus",
+     "waypoint_distance_reward",
+     "waypoint_heading_reward",
+-    "forward_velocity_reward",
+     "progress_reward",
+     "action_smoothness_penalty",
+-    "base_motion_penalty",
+-    "steering_penalty",
+     "alive_reward",
+     # Custom Terminations
+     "all_waypoints_reached",
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+index 7f0a94f..45695b3 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+@@ -3,56 +3,30 @@
+ #
+ # SPDX-License-Identifier: BSD-3-Clause
+ 
+-"""Custom reward functions for Leatherback waypoint navigation task.
+-
+-These reward functions encourage the wheeled robot to navigate through waypoints
+-while maintaining stable driving behavior.
+-"""
++"""Custom reward functions for Leatherback waypoint navigation task."""
+ 
+ from __future__ import annotations
+ 
+ import torch
+ from typing import TYPE_CHECKING
+ 
+-from isaaclab.assets import Articulation, RigidObject
++from isaaclab.assets import RigidObject
+ from isaaclab.managers import SceneEntityCfg
+ 
+ if TYPE_CHECKING:
+     from isaaclab.envs import ManagerBasedRLEnv
+ 
+ 
+-##
+-# Waypoint Navigation Rewards
+-##
+-
+-
+ def waypoint_reached_bonus(
+     env: ManagerBasedRLEnv,
+     command_name: str = "waypoints",
+     bonus: float = 10.0,
+ ) -> torch.Tensor:
+-    """Bonus reward when a waypoint is reached.
+-    
+-    Provides a large positive reward when the robot reaches within the threshold
+-    distance of the current waypoint and advances to the next one.
+-    Uses 2D distance for waypoint reach detection (appropriate for ground vehicles).
+-    
+-    Args:
+-        env: The environment instance.
+-        command_name: Name of the waypoint command term. Defaults to "waypoints".
+-        bonus: Bonus reward value. Defaults to 10.0.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the reward.
+-    """
++    """Bonus reward when a waypoint is reached."""
+     waypoint_term = env.command_manager.get_term(command_name)
+-    
+-    # Get current waypoint in robot frame (x, y for 2D distance)
+     waypoint_cmd = env.command_manager.get_command(command_name)
+-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D navigation
++    current_wp_b = waypoint_cmd[:, :2]
+     distance = torch.norm(current_wp_b, dim=1)
+-    
+-    # Reward when within threshold
+     reached = distance < waypoint_term.cfg.waypoint_reach_threshold
+     return reached.float() * bonus
+ 
+@@ -62,22 +36,10 @@ def waypoint_distance_reward(
+     command_name: str = "waypoints",
+     std: float = 2.0,
+ ) -> torch.Tensor:
+-    """Reward for being close to the current waypoint using exponential kernel.
+-    
+-    Uses an exponential decay based on 2D distance: exp(-distance / std)
+-    
+-    Args:
+-        env: The environment instance.
+-        command_name: Name of the waypoint command term. Defaults to "waypoints".
+-        std: Standard deviation for exponential kernel. Defaults to 2.0.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the reward.
+-    """
++    """Reward for being close to the waypoint: exp(-distance / std)."""
+     waypoint_cmd = env.command_manager.get_command(command_name)
+-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D distance
++    current_wp_b = waypoint_cmd[:, :2]
+     distance = torch.norm(current_wp_b, dim=1)
+-    
+     return torch.exp(-distance / std)
+ 
+ 
+@@ -86,151 +48,36 @@ def waypoint_heading_reward(
+     command_name: str = "waypoints",
+     std: float = 0.5,
+ ) -> torch.Tensor:
+-    """Reward for facing towards the current waypoint using exponential kernel.
+-    
+-    Encourages the robot to orient itself towards the waypoint (yaw heading).
+-    
+-    Args:
+-        env: The environment instance.
+-        command_name: Name of the waypoint command term. Defaults to "waypoints".
+-        std: Standard deviation for exponential kernel. Defaults to 0.5.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the reward.
+-    """
++    """Reward for facing towards the current waypoint."""
+     waypoint_cmd = env.command_manager.get_command(command_name)
+-    current_wp_b = waypoint_cmd[:, :2]  # x, y for yaw heading
+-    
+-    # Heading error (yaw angle to waypoint in robot frame)
++    current_wp_b = waypoint_cmd[:, :2]
+     heading_error = torch.abs(torch.atan2(current_wp_b[:, 1], current_wp_b[:, 0]))
+-    
+     return torch.exp(-heading_error / std)
+ 
+ 
+-def forward_velocity_reward(
+-    env: ManagerBasedRLEnv,
+-    command_name: str = "waypoints",
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-    target_velocity: float = 1.0,
+-    std: float = 0.5,
+-) -> torch.Tensor:
+-    """Reward for moving towards the waypoint.
+-    
+-    Encourages the robot to move in the direction of the waypoint.
+-    
+-    Args:
+-        env: The environment instance.
+-        command_name: Name of the waypoint command term. Defaults to "waypoints".
+-        asset_cfg: Configuration for the robot asset.
+-        target_velocity: Target velocity when heading towards waypoint. Defaults to 1.0.
+-        std: Standard deviation for exponential kernel. Defaults to 0.5.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the reward.
+-    """
+-    asset: RigidObject = env.scene[asset_cfg.name]
+-    waypoint_cmd = env.command_manager.get_command(command_name)
+-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D direction
+-    
+-    # Compute desired velocity direction (normalized 2D waypoint direction)
+-    wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
+-    wp_direction = current_wp_b / wp_distance
+-    
+-    # Get robot's velocity in base frame (2D horizontal)
+-    vel_b = asset.data.root_lin_vel_b[:, :2]
+-    
+-    # Project velocity onto waypoint direction (2D dot product)
+-    velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
+-    
+-    # Reward tracking target velocity towards waypoint
+-    vel_error = torch.abs(velocity_towards_wp - target_velocity)
+-    return torch.exp(-vel_error / std)
+-
+-
+ def progress_reward(
+     env: ManagerBasedRLEnv,
+     command_name: str = "waypoints",
+     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+ ) -> torch.Tensor:
+-    """Reward for making progress towards the current waypoint.
+-    
+-    This is computed as the velocity component in the direction of the waypoint,
+-    rewarding the robot for getting closer.
+-    
+-    Args:
+-        env: The environment instance.
+-        command_name: Name of the waypoint command term. Defaults to "waypoints".
+-        asset_cfg: Configuration for the robot asset.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the reward (positive when getting closer).
+-    """
++    """Reward for making progress towards the current waypoint."""
+     asset: RigidObject = env.scene[asset_cfg.name]
+     waypoint_cmd = env.command_manager.get_command(command_name)
+-    current_wp_b = waypoint_cmd[:, :2]  # x, y for 2D progress
++    current_wp_b = waypoint_cmd[:, :2]
+     
+-    # Compute direction to waypoint (normalized 2D)
+     wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
+     wp_direction = current_wp_b / wp_distance
+-    
+-    # Get robot's velocity in base frame (2D horizontal)
+     vel_b = asset.data.root_lin_vel_b[:, :2]
+-    
+-    # Velocity component towards waypoint (positive means getting closer)
+     velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
+     
+-    # Clip to avoid large negative rewards when moving away
+     return torch.clamp(velocity_towards_wp, min=-0.5)
+ 
+ 
+-##
+-# Wheeled Robot Regularization Penalties
+-##
+-
+-
+ def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Penalize large instantaneous changes in the network action output.
+-    
+-    This encourages smooth steering and throttle control.
+-    """
++    """Penalize large changes in action output for smooth control."""
+     return torch.linalg.norm((env.action_manager.action - env.action_manager.prev_action), dim=1)
+ 
+ 
+-def base_motion_penalty(
+-    env: ManagerBasedRLEnv,
+-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+-) -> torch.Tensor:
+-    """Penalize base vertical and roll/pitch velocity.
+-    
+-    Encourages the wheeled robot to maintain stable driving without bouncing.
+-    """
+-    asset: RigidObject = env.scene[asset_cfg.name]
+-    return 0.8 * torch.square(asset.data.root_lin_vel_b[:, 2]) + 0.2 * torch.sum(
+-        torch.abs(asset.data.root_ang_vel_b[:, :2]), dim=1
+-    )
+-
+-
+-def steering_penalty(
+-    env: ManagerBasedRLEnv,
+-    steering_action_index: int = 1,
+-) -> torch.Tensor:
+-    """Penalize excessive steering angle.
+-    
+-    Encourages the robot to drive more straight when possible.
+-    
+-    Args:
+-        env: The environment instance.
+-        steering_action_index: Index of steering in the action vector. Defaults to 1.
+-        
+-    Returns:
+-        Tensor of shape (num_envs,) containing the penalty.
+-    """
+-    # Get steering action (assuming action format is [throttle, steering])
+-    steering = env.action_manager.action[:, steering_action_index]
+-    return torch.square(steering)
+-
+-
+ def alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+-    """Constant reward for staying alive (not terminated)."""
++    """Constant reward per step (use negative weight for time penalty)."""
+     return torch.ones(env.num_envs, device=env.device)
+-
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+index 0cd0c40..4767aef 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+@@ -11,10 +11,8 @@ and the waypoints, and must output throttle and steering commands to navigate.
+ """
+ 
+ import isaaclab.sim as sim_utils
+-import isaaclab.terrains as terrain_gen
+ from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+ from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
+-from isaaclab.envs.mdp.rewards import is_terminated_term
+ from isaaclab.managers import EventTermCfg as EventTerm
+ from isaaclab.managers import ObservationGroupCfg as ObsGroup
+ from isaaclab.managers import ObservationTermCfg as ObsTerm
+@@ -24,7 +22,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
+ from isaaclab.scene import InteractiveSceneCfg
+ from isaaclab.terrains import TerrainImporterCfg
+ from isaaclab.utils import configclass
+-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
++from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+ 
+ from . import mdp
+@@ -40,22 +38,8 @@ from leatherbacknav.robots import LEATHERBACK_CFG  # isort: skip
+ # Terrain configuration
+ ##
+ 
+-FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
+-    size=(20.0, 20.0),
+-    border_width=15.0,
+-    num_rows=5,
+-    num_cols=5,
+-    horizontal_scale=0.1,
+-    vertical_scale=0.005,
+-    slope_threshold=0.75,
+-    difficulty_range=(0.0, 1.0),
+-    use_cache=False,
+-    sub_terrains={
+-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.8),
+-        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+-            proportion=0.4, noise_range=(0.01, 0.05), noise_step=0.005, border_width=0.25
+-        ),
+-    },
++# NOTE: Using simple plane terrain (not mesh generator) to match original Leatherback behavior
++# Mesh-based terrain can cause slight height mismatches leading to initial bouncing
+ 
+ ##
+ # Scene definition
+@@ -66,11 +50,11 @@ FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
+ class WaypointNavSceneCfg(InteractiveSceneCfg):
+     """Configuration for the waypoint navigation scene."""
+ 
+-    # ground terrain
++    # ground terrain - using simple plane (matches original Leatherback project)
++    # This prevents the initial "hopping" that occurs with mesh-based terrain
+     terrain = TerrainImporterCfg(
+         prim_path="/World/ground",
+-        terrain_type="generator",
+-        terrain_generator=FLAT_TERRAIN_CFG,
++        terrain_type="plane",  # Simple plane instead of mesh generator
+         max_init_terrain_level=None,
+         collision_group=-1,
+         physics_material=sim_utils.RigidBodyMaterialCfg(
+@@ -78,11 +62,7 @@ class WaypointNavSceneCfg(InteractiveSceneCfg):
+             restitution_combine_mode="multiply",
+             static_friction=1.0,
+             dynamic_friction=1.0,
+-        ),
+-        visual_material=sim_utils.MdlFileCfg(
+-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+-            project_uvw=True,
+-            texture_scale=(0.25, 0.25),
++            restitution=0.0,  # No bounce!
+         ),
+         debug_vis=False,
+     )
+@@ -120,7 +100,7 @@ class CommandsCfg:
+         num_waypoints=5,
+         waypoint_spacing=(0.5, 3.0),
+         initial_waypoint_distance=(0.5, 2.0),
+-        waypoint_reach_threshold=0.25,  # Larger threshold for wheeled robots
++        waypoint_reach_threshold=0.10,  # Larger threshold for wheeled robots
+         num_lookahead_waypoints=1,
+         debug_vis=True,
+         ranges=_WAYPOINT_RANGES,
+@@ -137,17 +117,20 @@ class ActionsCfg:
+     """
+ 
+     # Throttle control (wheel velocities)
++    # Original uses scale=10 with max=50, policy outputs [-1, 1]
+     throttle = mdp.JointVelocityActionCfg(
+         asset_name="robot",
+         joint_names=["Wheel.*"],
+-        scale=10.0,  # Scale for wheel velocity
++        scale=10.0,  # Scale for wheel velocity (matches original)
+     )
+     
+     # Steering control (front wheel angles)
++    # CRITICAL: Original uses scale=0.01 with max=0.75
++    # Using 0.5 was 50x too large, causing instability!
+     steering = mdp.JointPositionActionCfg(
+         asset_name="robot",
+         joint_names=["Knuckle__Upright__Front.*"],
+-        scale=0.5,  # Scale for steering angle
++        scale=0.75,  # Max steering angle (radians) - matches original max
+         use_default_offset=True,
+     )
+ 
+@@ -214,28 +197,30 @@ class ObservationsCfg:
+ class EventCfg:
+     """Configuration for events."""
+ 
+-    # startup
+-    physics_material = EventTerm(
+-        func=mdp.randomize_rigid_body_material,
+-        mode="startup",
+-        params={
+-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "static_friction_range": (0.6, 1.0),
+-            "dynamic_friction_range": (0.4, 0.8),
+-            "restitution_range": (0.0, 0.0),
+-            "num_buckets": 64,
+-        },
+-    )
+-
+-    add_base_mass = EventTerm(
+-        func=mdp.randomize_rigid_body_mass,
+-        mode="startup",
+-        params={
+-            "asset_cfg": SceneEntityCfg("robot", body_names="body"),
+-            "mass_distribution_params": (-1.0, 1.0),
+-            "operation": "add",
+-        },
+-    )
++    # NOTE: Domain randomization events commented out for initial development.
++    # Re-enable these later for robust sim-to-real transfer training.
++    
++    # physics_material = EventTerm(
++    #     func=mdp.randomize_rigid_body_material,
++    #     mode="startup",
++    #     params={
++    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
++    #         "static_friction_range": (0.6, 1.0),
++    #         "dynamic_friction_range": (0.4, 0.8),
++    #         "restitution_range": (0.0, 0.0),
++    #         "num_buckets": 64,
++    #     },
++    # )
++
++    # add_base_mass = EventTerm(
++    #     func=mdp.randomize_rigid_body_mass,
++    #     mode="startup",
++    #     params={
++    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
++    #         "mass_distribution_params": (-1.0, 1.0),
++    #         "operation": "add",
++    #     },
++    # )
+ 
+     # reset
+     reset_base = EventTerm(
+@@ -270,49 +255,38 @@ class EventCfg:
+ class RewardsCfg:
+     """Reward terms for the MDP."""
+ 
+-    # -- Primary task rewards: waypoint navigation
++    # Bonus for reaching waypoints
+     waypoint_reached = RewTerm(
+         func=mdp.waypoint_reached_bonus,
+-        weight=15.0,
++        weight=10.0,
+         params={"command_name": "waypoints", "bonus": 1.0},
+     )
+-    waypoint_distance = RewTerm(
+-        func=mdp.waypoint_distance_reward,
+-        weight=3.0,
+-        params={"command_name": "waypoints", "std": 2.0},
+-    )
+-    waypoint_heading = RewTerm(
+-        func=mdp.waypoint_heading_reward,
+-        weight=2.0,
+-        params={"command_name": "waypoints", "std": 0.5},
+-    )
++    
++    # Progress toward waypoint (velocity toward goal)
+     progress = RewTerm(
+         func=mdp.progress_reward,
+-        weight=2.0,
++        weight=1.0,
+         params={"command_name": "waypoints", "asset_cfg": SceneEntityCfg("robot")},
+     )
+-
+-    # Penalty for flipping over
+-    flipped_penalty = RewTerm(
+-        func=is_terminated_term,
+-        weight=-50.0,
+-        params={"term_keys": ["flipped_over"]},
++    
++    # Reward for facing the waypoint
++    waypoint_heading = RewTerm(
++        func=mdp.waypoint_heading_reward,
++        weight=0.5,
++        params={"command_name": "waypoints", "std": 0.25},
+     )
+-
+-    # -- Regularization penalties for smooth driving
++    
++    # Penalize jerky control (smooth driving)
+     action_smoothness = RewTerm(
+         func=mdp.action_smoothness_penalty,
+-        weight=-0.5,
+-    )
+-    base_motion = RewTerm(
+-        func=mdp.base_motion_penalty,
+-        weight=-1.0,
+-        params={"asset_cfg": SceneEntityCfg("robot")},
+-    )
+-    steering = RewTerm(
+-        func=mdp.steering_penalty,
+         weight=-0.1,
+-        params={"steering_action_index": 1},  # Assuming [throttle, steering] action order
++    )
++    
++    # Reward for being close to waypoint (smaller std = steeper curve near goal)
++    waypoint_distance = RewTerm(
++        func=mdp.waypoint_distance_reward,
++        weight=0.5,
++        params={"command_name": "waypoints", "std": 0.3},
+     )
+ 
+ 
+@@ -362,11 +336,12 @@ class WaypointNavEnvCfg(ManagerBasedRLEnvCfg):
+     def __post_init__(self):
+         """Post initialization."""
+         # General settings
+-        self.decimation = 4  # 125 Hz control (faster for wheeled robots)
++        self.decimation = 4
+         self.episode_length_s = 30.0  # Allow enough time to reach all waypoints
+         
+-        # Simulation settings
+-        self.sim.dt = 0.002  # 500 Hz physics
++        # Simulation settings - match original Leatherback project
++        # Using 1/60 physics timestep prevents initial hopping/settling issues
++        self.sim.dt = 1.0 / 60.0  # 60 Hz physics (matches original Leatherback)
+         self.sim.render_interval = self.decimation
+         self.sim.physics_material = self.scene.terrain.physics_material
+ 

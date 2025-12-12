@@ -11,10 +11,8 @@ and the waypoints, and must output throttle and steering commands to navigate.
 """
 
 import isaaclab.sim as sim_utils
-import isaaclab.terrains as terrain_gen
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
-from isaaclab.envs.mdp.rewards import is_terminated_term
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -24,7 +22,7 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
@@ -40,22 +38,8 @@ from leatherbacknav.robots import LEATHERBACK_CFG  # isort: skip
 # Terrain configuration
 ##
 
-FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
-    size=(20.0, 20.0),
-    border_width=15.0,
-    num_rows=5,
-    num_cols=5,
-    horizontal_scale=0.1,
-    vertical_scale=0.005,
-    slope_threshold=0.75,
-    difficulty_range=(0.0, 1.0),
-    use_cache=False,
-    sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.8),
-        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-            proportion=0.4, noise_range=(0.01, 0.05), noise_step=0.005, border_width=0.25
-        ),
-    },
+# NOTE: Using simple plane terrain (not mesh generator) to match original Leatherback behavior
+# Mesh-based terrain can cause slight height mismatches leading to initial bouncing
 
 ##
 # Scene definition
@@ -66,11 +50,11 @@ FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
 class WaypointNavSceneCfg(InteractiveSceneCfg):
     """Configuration for the waypoint navigation scene."""
 
-    # ground terrain
+    # ground terrain - using simple plane (matches original Leatherback project)
+    # This prevents the initial "hopping" that occurs with mesh-based terrain
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=FLAT_TERRAIN_CFG,
+        terrain_type="plane",  # Simple plane instead of mesh generator
         max_init_terrain_level=None,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -78,11 +62,7 @@ class WaypointNavSceneCfg(InteractiveSceneCfg):
             restitution_combine_mode="multiply",
             static_friction=1.0,
             dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
+            restitution=0.0,  # No bounce!
         ),
         debug_vis=False,
     )
@@ -120,7 +100,7 @@ class CommandsCfg:
         num_waypoints=5,
         waypoint_spacing=(0.5, 3.0),
         initial_waypoint_distance=(0.5, 2.0),
-        waypoint_reach_threshold=0.25,  # Larger threshold for wheeled robots
+        waypoint_reach_threshold=0.10,  # Larger threshold for wheeled robots
         num_lookahead_waypoints=1,
         debug_vis=True,
         ranges=_WAYPOINT_RANGES,
@@ -137,17 +117,20 @@ class ActionsCfg:
     """
 
     # Throttle control (wheel velocities)
+    # Original uses scale=10 with max=50, policy outputs [-1, 1]
     throttle = mdp.JointVelocityActionCfg(
         asset_name="robot",
         joint_names=["Wheel.*"],
-        scale=10.0,  # Scale for wheel velocity
+        scale=10.0,  # Scale for wheel velocity (matches original)
     )
     
     # Steering control (front wheel angles)
+    # CRITICAL: Original uses scale=0.01 with max=0.75
+    # Using 0.5 was 50x too large, causing instability!
     steering = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=["Knuckle__Upright__Front.*"],
-        scale=0.5,  # Scale for steering angle
+        scale=0.75,  # Max steering angle (radians) - matches original max
         use_default_offset=True,
     )
 
@@ -214,28 +197,30 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    # startup
-    physics_material = EventTerm(
-        func=mdp.randomize_rigid_body_material,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "static_friction_range": (0.6, 1.0),
-            "dynamic_friction_range": (0.4, 0.8),
-            "restitution_range": (0.0, 0.0),
-            "num_buckets": 64,
-        },
-    )
+    # NOTE: Domain randomization events commented out for initial development.
+    # Re-enable these later for robust sim-to-real transfer training.
+    
+    # physics_material = EventTerm(
+    #     func=mdp.randomize_rigid_body_material,
+    #     mode="startup",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+    #         "static_friction_range": (0.6, 1.0),
+    #         "dynamic_friction_range": (0.4, 0.8),
+    #         "restitution_range": (0.0, 0.0),
+    #         "num_buckets": 64,
+    #     },
+    # )
 
-    add_base_mass = EventTerm(
-        func=mdp.randomize_rigid_body_mass,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="body"),
-            "mass_distribution_params": (-1.0, 1.0),
-            "operation": "add",
-        },
-    )
+    # add_base_mass = EventTerm(
+    #     func=mdp.randomize_rigid_body_mass,
+    #     mode="startup",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+    #         "mass_distribution_params": (-1.0, 1.0),
+    #         "operation": "add",
+    #     },
+    # )
 
     # reset
     reset_base = EventTerm(
@@ -270,49 +255,38 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # -- Primary task rewards: waypoint navigation
+    # Bonus for reaching waypoints
     waypoint_reached = RewTerm(
         func=mdp.waypoint_reached_bonus,
-        weight=15.0,
+        weight=10.0,
         params={"command_name": "waypoints", "bonus": 1.0},
     )
-    waypoint_distance = RewTerm(
-        func=mdp.waypoint_distance_reward,
-        weight=3.0,
-        params={"command_name": "waypoints", "std": 2.0},
-    )
-    waypoint_heading = RewTerm(
-        func=mdp.waypoint_heading_reward,
-        weight=2.0,
-        params={"command_name": "waypoints", "std": 0.5},
-    )
+    
+    # Progress toward waypoint (velocity toward goal)
     progress = RewTerm(
         func=mdp.progress_reward,
         weight=2.0,
         params={"command_name": "waypoints", "asset_cfg": SceneEntityCfg("robot")},
     )
-
-    # Penalty for flipping over
-    flipped_penalty = RewTerm(
-        func=is_terminated_term,
-        weight=-50.0,
-        params={"term_keys": ["flipped_over"]},
+    
+    # Reward for facing the waypoint
+    waypoint_heading = RewTerm(
+        func=mdp.waypoint_heading_reward,
+        weight=0.5,
+        params={"command_name": "waypoints", "std": 0.25},
     )
-
-    # -- Regularization penalties for smooth driving
+    
+    # Penalize jerky control (smooth driving)
     action_smoothness = RewTerm(
         func=mdp.action_smoothness_penalty,
-        weight=-0.5,
-    )
-    base_motion = RewTerm(
-        func=mdp.base_motion_penalty,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
-    steering = RewTerm(
-        func=mdp.steering_penalty,
         weight=-0.1,
-        params={"steering_action_index": 1},  # Assuming [throttle, steering] action order
+    )
+    
+    # Reward for being close to waypoint (smaller std = steeper curve near goal)
+    waypoint_distance = RewTerm(
+        func=mdp.waypoint_distance_reward,
+        weight=0.5,
+        params={"command_name": "waypoints", "std": 0.3},
     )
 
 
@@ -362,11 +336,12 @@ class WaypointNavEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # General settings
-        self.decimation = 4  # 125 Hz control (faster for wheeled robots)
+        self.decimation = 4
         self.episode_length_s = 30.0  # Allow enough time to reach all waypoints
         
-        # Simulation settings
-        self.sim.dt = 0.002  # 500 Hz physics
+        # Simulation settings - match original Leatherback project
+        # Using 1/60 physics timestep prevents initial hopping/settling issues
+        self.sim.dt = 1.0 / 60.0  # 60 Hz physics (matches original Leatherback)
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
 

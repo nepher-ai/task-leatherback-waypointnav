@@ -1,0 +1,161 @@
+--- git status ---
+On branch waypoint
+Your branch is up to date with 'origin/waypoint'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   scripts/list_envs.py
+	modified:   source/leatherbacknav/leatherbacknav/robots/leatherback.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/
+	outputs/
+	scripts/rsl_rl/__pycache__/
+	source/leatherbacknav/leatherbacknav.egg-info/
+	source/leatherbacknav/leatherbacknav/__pycache__/
+	source/leatherbacknav/leatherbacknav/robots/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/agents/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/
+	source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/commands/__pycache__/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/scripts/list_envs.py b/scripts/list_envs.py
+index f495e35..46cda6d 100644
+--- a/scripts/list_envs.py
++++ b/scripts/list_envs.py
+@@ -5,6 +5,17 @@
+ 
+ """Script to list all registered environments in leatherbacknav."""
+ 
++"""Launch Isaac Sim Simulator first."""
++
++from isaaclab.app import AppLauncher
++
++# launch omniverse app
++app_launcher = AppLauncher(headless=True)
++simulation_app = app_launcher.app
++
++
++"""Rest everything follows."""
++
+ import gymnasium as gym
+ 
+ # Import leatherbacknav to register environments
+@@ -34,5 +45,12 @@ def main():
+ 
+ 
+ if __name__ == "__main__":
+-    main()
++    try:
++        # run the main function
++        main()
++    except Exception as e:
++        raise e
++    finally:
++        # close the app
++        simulation_app.close()
+ 
+diff --git a/source/leatherbacknav/leatherbacknav/robots/leatherback.py b/source/leatherbacknav/leatherbacknav/robots/leatherback.py
+index 70953cd..ae41d8d 100644
+--- a/source/leatherbacknav/leatherbacknav/robots/leatherback.py
++++ b/source/leatherbacknav/leatherbacknav/robots/leatherback.py
+@@ -34,7 +34,7 @@ LEATHERBACK_CFG = ArticulationCfg(
+         ),
+     ),
+     init_state=ArticulationCfg.InitialStateCfg(
+-        pos=(0.0, 0.0, 0.05),
++        pos=(0.0, 0.0, 0.02),  # Lowered to reduce initial drop/bounce
+         joint_pos={
+             "Wheel__Knuckle__Front_Left": 0.0,
+             "Wheel__Knuckle__Front_Right": 0.0,
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+index 0cd0c40..3fec8ca 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+@@ -56,6 +56,7 @@ FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
+             proportion=0.4, noise_range=(0.01, 0.05), noise_step=0.005, border_width=0.25
+         ),
+     },
++)
+ 
+ ##
+ # Scene definition
+@@ -78,6 +79,7 @@ class WaypointNavSceneCfg(InteractiveSceneCfg):
+             restitution_combine_mode="multiply",
+             static_friction=1.0,
+             dynamic_friction=1.0,
++            restitution=0.0,  # No bounce!
+         ),
+         visual_material=sim_utils.MdlFileCfg(
+             mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+@@ -214,28 +216,30 @@ class ObservationsCfg:
+ class EventCfg:
+     """Configuration for events."""
+ 
+-    # startup
+-    physics_material = EventTerm(
+-        func=mdp.randomize_rigid_body_material,
+-        mode="startup",
+-        params={
+-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+-            "static_friction_range": (0.6, 1.0),
+-            "dynamic_friction_range": (0.4, 0.8),
+-            "restitution_range": (0.0, 0.0),
+-            "num_buckets": 64,
+-        },
+-    )
+-
+-    add_base_mass = EventTerm(
+-        func=mdp.randomize_rigid_body_mass,
+-        mode="startup",
+-        params={
+-            "asset_cfg": SceneEntityCfg("robot", body_names="body"),
+-            "mass_distribution_params": (-1.0, 1.0),
+-            "operation": "add",
+-        },
+-    )
++    # NOTE: Domain randomization events commented out for initial development.
++    # Re-enable these later for robust sim-to-real transfer training.
++    
++    # physics_material = EventTerm(
++    #     func=mdp.randomize_rigid_body_material,
++    #     mode="startup",
++    #     params={
++    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
++    #         "static_friction_range": (0.6, 1.0),
++    #         "dynamic_friction_range": (0.4, 0.8),
++    #         "restitution_range": (0.0, 0.0),
++    #         "num_buckets": 64,
++    #     },
++    # )
++
++    # add_base_mass = EventTerm(
++    #     func=mdp.randomize_rigid_body_mass,
++    #     mode="startup",
++    #     params={
++    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
++    #         "mass_distribution_params": (-1.0, 1.0),
++    #         "operation": "add",
++    #     },
++    # )
+ 
+     # reset
+     reset_base = EventTerm(
+@@ -311,7 +315,7 @@ class RewardsCfg:
+     )
+     steering = RewTerm(
+         func=mdp.steering_penalty,
+-        weight=-0.1,
++        weight=-0.5,
+         params={"steering_action_index": 1},  # Assuming [throttle, steering] action order
+     )
+ 
