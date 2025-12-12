@@ -51,9 +51,11 @@ FLAT_TERRAIN_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=1.0),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.8),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.4, noise_range=(0.01, 0.05), noise_step=0.005, border_width=0.25
+        ),
     },
-)
 
 ##
 # Scene definition
