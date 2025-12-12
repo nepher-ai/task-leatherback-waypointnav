@@ -49,6 +49,8 @@ from .rewards import (
     progress_reward,
     action_smoothness_penalty,
     alive_reward,
+    forward_velocity_reward,
+    backward_penalty,
 )
 
 # Import custom terminations
@@ -98,6 +100,8 @@ __all__ = [
     "progress_reward",
     "action_smoothness_penalty",
     "alive_reward",
+    "forward_velocity_reward",
+    "backward_penalty",
     # Custom Terminations
     "all_waypoints_reached",
     "flipped_over",

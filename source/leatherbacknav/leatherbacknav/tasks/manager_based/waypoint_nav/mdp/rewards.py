@@ -62,19 +62,45 @@ def progress_reward(
 ) -> torch.Tensor:
     """Reward for making progress towards the current waypoint.
     
-    Only rewards forward progress, doesn't punish reversing (car may need to back up to steer).
+    Uses DELTA-based reward: (previous_distance - current_distance).
+    This directly rewards reducing distance to waypoint, matching original Leatherback.
+    
+    Handles waypoint transitions by tracking the waypoint index and resetting
+    the previous distance when a new waypoint becomes active.
     """
-    asset: RigidObject = env.scene[asset_cfg.name]
+    waypoint_term = env.command_manager.get_term(command_name)
     waypoint_cmd = env.command_manager.get_command(command_name)
     current_wp_b = waypoint_cmd[:, :2]
+    current_distance = torch.norm(current_wp_b, dim=1)
     
-    wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
-    wp_direction = current_wp_b / wp_distance
-    vel_b = asset.data.root_lin_vel_b[:, :2]
-    velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
+    # Get or initialize tracking buffers
+    dist_key = f"_prev_waypoint_distance_{command_name}"
+    idx_key = f"_prev_waypoint_index_{command_name}"
     
-    # Only reward forward progress, don't punish reversing
-    return torch.clamp(velocity_towards_wp, min=0.0)
+    if not hasattr(env, dist_key):
+        setattr(env, dist_key, current_distance.clone())
+        setattr(env, idx_key, waypoint_term.current_waypoint_idx.clone())
+    
+    prev_distance = getattr(env, dist_key)
+    prev_waypoint_idx = getattr(env, idx_key)
+    current_waypoint_idx = waypoint_term.current_waypoint_idx
+    
+    # Detect waypoint transitions (index changed)
+    waypoint_changed = current_waypoint_idx != prev_waypoint_idx
+    
+    # Delta-based progress: positive when distance decreases (moving closer)
+    # When waypoint changes, use 0 progress (the waypoint_reached bonus handles that)
+    progress = torch.where(
+        waypoint_changed,
+        torch.zeros_like(current_distance),  # No progress penalty when waypoint changes
+        prev_distance - current_distance     # Normal delta-based progress
+    )
+    
+    # Update tracking buffers for next step
+    setattr(env, dist_key, current_distance.clone())
+    setattr(env, idx_key, current_waypoint_idx.clone())
+    
+    return progress
 
 
 def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
@@ -85,3 +111,29 @@ def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 def alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Constant reward per step (use negative weight for time penalty)."""
     return torch.ones(env.num_envs, device=env.device)
+
+
+def forward_velocity_reward(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward for moving forward in the robot's body frame.
+    
+    This prevents the robot from learning to drive backward.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Forward velocity in body frame (x-axis is forward)
+    forward_vel = asset.data.root_lin_vel_b[:, 0]
+    # Reward forward, penalize backward
+    return forward_vel
+
+
+def backward_penalty(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalty for moving backward in the robot's body frame."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    forward_vel = asset.data.root_lin_vel_b[:, 0]
+    # Only return negative values (backward motion), clamped to 0 otherwise
+    return torch.clamp(forward_vel, max=0.0)

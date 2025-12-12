@@ -200,28 +200,6 @@ class EventCfg:
     # NOTE: Domain randomization events commented out for initial development.
     # Re-enable these later for robust sim-to-real transfer training.
     
-    # physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-    #         "static_friction_range": (0.6, 1.0),
-    #         "dynamic_friction_range": (0.4, 0.8),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 64,
-    #     },
-    # )
-
-    # add_base_mass = EventTerm(
-    #     func=mdp.randomize_rigid_body_mass,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-    #         "mass_distribution_params": (-1.0, 1.0),
-    #         "operation": "add",
-    #     },
-    # )
-
     # reset
     reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,
@@ -253,41 +231,39 @@ class EventCfg:
 
 @configclass
 class RewardsCfg:
-    """Reward terms for the MDP."""
+    """Reward terms for the MDP.
+    
+    Based on original Leatherback reward structure:
+    - position_progress (delta-based): weight=1.0
+    - target_heading: weight=0.05  
+    - goal_reached: bonus=10.0
+    """
 
-    # Bonus for reaching waypoints
+    # Bonus for reaching waypoints (same as original)
     waypoint_reached = RewTerm(
         func=mdp.waypoint_reached_bonus,
         weight=10.0,
         params={"command_name": "waypoints", "bonus": 1.0},
     )
     
-    # Progress toward waypoint (velocity toward goal)
+    # Progress toward waypoint - DELTA-BASED (previous_dist - current_dist)
+    # This is the PRIMARY movement incentive - must be the dominant reward!
     progress = RewTerm(
         func=mdp.progress_reward,
-        weight=2.0,
+        weight=1.0,  # Matches original position_progress_weight
         params={"command_name": "waypoints", "asset_cfg": SceneEntityCfg("robot")},
     )
     
     # Reward for facing the waypoint
     waypoint_heading = RewTerm(
         func=mdp.waypoint_heading_reward,
-        weight=0.5,
+        weight=0.05,  # Matches original heading_progress_weight=0.05
         params={"command_name": "waypoints", "std": 0.25},
     )
     
-    # Penalize jerky control (smooth driving)
-    action_smoothness = RewTerm(
-        func=mdp.action_smoothness_penalty,
-        weight=-0.1,
-    )
-    
-    # Reward for being close to waypoint (smaller std = steeper curve near goal)
-    waypoint_distance = RewTerm(
-        func=mdp.waypoint_distance_reward,
-        weight=0.5,
-        params={"command_name": "waypoints", "std": 0.3},
-    )
+    # NOTE: No forward_velocity reward! The original Leatherback doesn't have it.
+    # Adding it causes reward hacking - robot learns to drive in circles
+    # instead of reaching waypoints. The delta-based progress reward is sufficient.
 
 
 @configclass

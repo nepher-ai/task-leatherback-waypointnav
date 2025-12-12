@@ -1,0 +1,217 @@
+--- git status ---
+On branch waypoint
+Your branch is up to date with 'origin/waypoint'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/events.out.tfevents.1765548267.DESKTOP-BSI956J.32804.0
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/waypoint_nav_env_cfg.cpython-311.pyc
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/__init__.cpython-311.pyc
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/rewards.cpython-311.pyc
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+	modified:   source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/exported/
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/model_100.pt
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/model_200.pt
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-47-55/
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_15-24-56/
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_15-44-19/
+	logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_16-02-05/
+	outputs/2025-12-12/14-41-45/
+	outputs/2025-12-12/14-47-55/
+	outputs/2025-12-12/15-24-56/
+	outputs/2025-12-12/15-44-19/
+	outputs/2025-12-12/16-02-05/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/events.out.tfevents.1765548267.DESKTOP-BSI956J.32804.0 b/logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/events.out.tfevents.1765548267.DESKTOP-BSI956J.32804.0
+index 2d1dabd..3d6cccc 100644
+Binary files a/logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/events.out.tfevents.1765548267.DESKTOP-BSI956J.32804.0 and b/logs/rsl_rl/leatherback_waypoint_nav/2025-12-12_14-04-12/events.out.tfevents.1765548267.DESKTOP-BSI956J.32804.0 differ
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/waypoint_nav_env_cfg.cpython-311.pyc b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/waypoint_nav_env_cfg.cpython-311.pyc
+index 8e72dd4..b5861b7 100644
+Binary files a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/waypoint_nav_env_cfg.cpython-311.pyc and b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/__pycache__/waypoint_nav_env_cfg.cpython-311.pyc differ
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+index 064cf67..220a4c5 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__init__.py
+@@ -49,6 +49,8 @@ from .rewards import (
+     progress_reward,
+     action_smoothness_penalty,
+     alive_reward,
++    forward_velocity_reward,
++    backward_penalty,
+ )
+ 
+ # Import custom terminations
+@@ -98,6 +100,8 @@ __all__ = [
+     "progress_reward",
+     "action_smoothness_penalty",
+     "alive_reward",
++    "forward_velocity_reward",
++    "backward_penalty",
+     # Custom Terminations
+     "all_waypoints_reached",
+     "flipped_over",
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/__init__.cpython-311.pyc b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/__init__.cpython-311.pyc
+index 18c875d..af0d2d4 100644
+Binary files a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/__init__.cpython-311.pyc and b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/__init__.cpython-311.pyc differ
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/rewards.cpython-311.pyc b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/rewards.cpython-311.pyc
+index 800245c..53707ba 100644
+Binary files a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/rewards.cpython-311.pyc and b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/__pycache__/rewards.cpython-311.pyc differ
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+index 9a0a409..f197917 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/mdp/rewards.py
+@@ -62,19 +62,45 @@ def progress_reward(
+ ) -> torch.Tensor:
+     """Reward for making progress towards the current waypoint.
+     
+-    Only rewards forward progress, doesn't punish reversing (car may need to back up to steer).
++    Uses DELTA-based reward: (previous_distance - current_distance).
++    This directly rewards reducing distance to waypoint, matching original Leatherback.
++    
++    Handles waypoint transitions by tracking the waypoint index and resetting
++    the previous distance when a new waypoint becomes active.
+     """
+-    asset: RigidObject = env.scene[asset_cfg.name]
++    waypoint_term = env.command_manager.get_term(command_name)
+     waypoint_cmd = env.command_manager.get_command(command_name)
+     current_wp_b = waypoint_cmd[:, :2]
++    current_distance = torch.norm(current_wp_b, dim=1)
++    
++    # Get or initialize tracking buffers
++    dist_key = f"_prev_waypoint_distance_{command_name}"
++    idx_key = f"_prev_waypoint_index_{command_name}"
++    
++    if not hasattr(env, dist_key):
++        setattr(env, dist_key, current_distance.clone())
++        setattr(env, idx_key, waypoint_term.current_waypoint_idx.clone())
++    
++    prev_distance = getattr(env, dist_key)
++    prev_waypoint_idx = getattr(env, idx_key)
++    current_waypoint_idx = waypoint_term.current_waypoint_idx
+     
+-    wp_distance = torch.norm(current_wp_b, dim=1, keepdim=True).clamp(min=1e-6)
+-    wp_direction = current_wp_b / wp_distance
+-    vel_b = asset.data.root_lin_vel_b[:, :2]
+-    velocity_towards_wp = torch.sum(vel_b * wp_direction, dim=1)
++    # Detect waypoint transitions (index changed)
++    waypoint_changed = current_waypoint_idx != prev_waypoint_idx
+     
+-    # Only reward forward progress, don't punish reversing
+-    return torch.clamp(velocity_towards_wp, min=0.0)
++    # Delta-based progress: positive when distance decreases (moving closer)
++    # When waypoint changes, use 0 progress (the waypoint_reached bonus handles that)
++    progress = torch.where(
++        waypoint_changed,
++        torch.zeros_like(current_distance),  # No progress penalty when waypoint changes
++        prev_distance - current_distance     # Normal delta-based progress
++    )
++    
++    # Update tracking buffers for next step
++    setattr(env, dist_key, current_distance.clone())
++    setattr(env, idx_key, current_waypoint_idx.clone())
++    
++    return progress
+ 
+ 
+ def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+@@ -85,3 +111,29 @@ def action_smoothness_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+ def alive_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+     """Constant reward per step (use negative weight for time penalty)."""
+     return torch.ones(env.num_envs, device=env.device)
++
++
++def forward_velocity_reward(
++    env: ManagerBasedRLEnv,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
++) -> torch.Tensor:
++    """Reward for moving forward in the robot's body frame.
++    
++    This prevents the robot from learning to drive backward.
++    """
++    asset: RigidObject = env.scene[asset_cfg.name]
++    # Forward velocity in body frame (x-axis is forward)
++    forward_vel = asset.data.root_lin_vel_b[:, 0]
++    # Reward forward, penalize backward
++    return forward_vel
++
++
++def backward_penalty(
++    env: ManagerBasedRLEnv,
++    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
++) -> torch.Tensor:
++    """Penalty for moving backward in the robot's body frame."""
++    asset: RigidObject = env.scene[asset_cfg.name]
++    forward_vel = asset.data.root_lin_vel_b[:, 0]
++    # Only return negative values (backward motion), clamped to 0 otherwise
++    return torch.clamp(forward_vel, max=0.0)
+diff --git a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+index 950e803..22e6adc 100644
+--- a/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
++++ b/source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/waypoint_nav_env_cfg.py
+@@ -253,41 +253,39 @@ class EventCfg:
+ 
+ @configclass
+ class RewardsCfg:
+-    """Reward terms for the MDP."""
++    """Reward terms for the MDP.
++    
++    Based on original Leatherback reward structure:
++    - position_progress (delta-based): weight=1.0
++    - target_heading: weight=0.05  
++    - goal_reached: bonus=10.0
++    """
+ 
+-    # Bonus for reaching waypoints
++    # Bonus for reaching waypoints (same as original)
+     waypoint_reached = RewTerm(
+         func=mdp.waypoint_reached_bonus,
+         weight=10.0,
+         params={"command_name": "waypoints", "bonus": 1.0},
+     )
+     
+-    # Progress toward waypoint (velocity toward goal)
++    # Progress toward waypoint - DELTA-BASED (previous_dist - current_dist)
++    # This is the PRIMARY movement incentive - must be the dominant reward!
+     progress = RewTerm(
+         func=mdp.progress_reward,
+-        weight=2.0,
++        weight=1.0,  # Matches original position_progress_weight
+         params={"command_name": "waypoints", "asset_cfg": SceneEntityCfg("robot")},
+     )
+     
+     # Reward for facing the waypoint
+     waypoint_heading = RewTerm(
+         func=mdp.waypoint_heading_reward,
+-        weight=0.5,
++        weight=0.05,  # Matches original heading_progress_weight=0.05
+         params={"command_name": "waypoints", "std": 0.25},
+     )
+     
+-    # Penalize jerky control (smooth driving)
+-    action_smoothness = RewTerm(
+-        func=mdp.action_smoothness_penalty,
+-        weight=-0.1,
+-    )
+-    
+-    # Reward for being close to waypoint (smaller std = steeper curve near goal)
+-    waypoint_distance = RewTerm(
+-        func=mdp.waypoint_distance_reward,
+-        weight=0.5,
+-        params={"command_name": "waypoints", "std": 0.3},
+-    )
++    # NOTE: No forward_velocity reward! The original Leatherback doesn't have it.
++    # Adding it causes reward hacking - robot learns to drive in circles
++    # instead of reaching waypoints. The delta-based progress reward is sufficient.
+ 
+ 
+ @configclass
