@@ -55,7 +55,6 @@ _build
 
 # RL-Games
 **/runs/*
-**/logs/*
 **/recordings/*
 
 # Pre-Trained Checkpoints
@@ -66,7 +65,6 @@ _build
 
 # Tests
 tests/
-logs/
 
 # Docker history
 .isaac-lab-docker-history
