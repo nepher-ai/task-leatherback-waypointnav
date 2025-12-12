@@ -13,6 +13,11 @@ import gymnasium as gym
 
 from . import agents
 
+# Export evaluation compatibility utilities
+from .eval_compat import EvalCompatEnv, wrap_for_eval
+
+__all__ = ["EvalCompatEnv", "wrap_for_eval"]
+
 ##
 # Register Gym environments.
 ##

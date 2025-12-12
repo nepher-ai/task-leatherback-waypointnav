@@ -19,11 +19,11 @@ WAYPOINT_MARKER_CFG = VisualizationMarkersCfg(
     prim_path="/World/Visuals/Waypoints",
     markers={
         "marker0": sim_utils.SphereCfg(  # Current target (red)
-            radius=0.08,
+            radius=0.02,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
         ),
         "marker1": sim_utils.SphereCfg(  # Future targets (green)
-            radius=0.05,
+            radius=0.03,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
         ),
     }
