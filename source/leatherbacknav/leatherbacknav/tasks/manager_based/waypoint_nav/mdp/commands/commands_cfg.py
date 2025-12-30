@@ -72,12 +72,16 @@ class WaypointCommandCfg(CommandTermCfg):
         SpacingScenarioCfg(spacing_range=(1.0, 2.0), weight=1.5),
         SpacingScenarioCfg(spacing_range=(2.0, 3.0), weight=1.0),
         SpacingScenarioCfg(spacing_range=(3.0, 5.0), weight=0.5),
-        SpacingScenarioCfg(spacing_range=(0.5, 3.0), weight=1.5),
+        SpacingScenarioCfg(spacing_range=(5.5, 8.0), weight=100.0),
     ])
     """Spacing scenarios for diverse training (0.5-5.0m range). Empty list uses legacy waypoint_spacing."""
     
     per_waypoint_spacing: bool = True
     """If True, each waypoint samples its scenario independently. If False, one scenario per episode."""
+    
+    use_envs_nav_waypoints: bool = False
+    """If True, use waypoints from envs-nav scene config (gen_waypoints method) instead of random sampling.
+    Requires the environment to have _scene_cfg with gen_waypoints method (e.g., waypoint-benchmark-v1)."""
 
     @configclass
     class Ranges:
