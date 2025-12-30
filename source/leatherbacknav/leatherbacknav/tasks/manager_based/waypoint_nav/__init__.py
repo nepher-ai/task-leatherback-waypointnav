@@ -42,3 +42,28 @@ gym.register(
     },
 )
 
+##
+# Navigation environments with envs-nav integration
+# Use --env_id and --scene args to select environment
+##
+
+gym.register(
+    id="Nepher-Leatherback-WaypointNav-Envs-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.waypoint_nav_env_cfg_envs_nav:WaypointNavEnvCfg_EnvsNav",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:WaypointNavPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Nepher-Leatherback-WaypointNav-Envs-Play-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.waypoint_nav_env_cfg_envs_nav:WaypointNavEnvCfg_EnvsNav_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:WaypointNavPPORunnerCfg",
+    },
+)
+

@@ -32,15 +32,7 @@ WAYPOINT_MARKER_CFG = VisualizationMarkersCfg(
 
 @dataclass
 class SpacingScenarioCfg:
-    """Configuration for a single spacing scenario.
-    
-    Each scenario defines a range of distances between consecutive waypoints
-    and a weight for sampling probability.
-    
-    Args:
-        spacing_range: Min and max distance (in meters) between consecutive waypoints.
-        weight: Relative weight for sampling this scenario. Higher weight = more likely.
-    """
+    """Spacing scenario: distance range between consecutive waypoints and sampling weight."""
     
     spacing_range: tuple[float, float] = (0.5, 1.0)
     weight: float = 1.0
@@ -48,22 +40,10 @@ class SpacingScenarioCfg:
 
 @configclass
 class WaypointCommandCfg(CommandTermCfg):
-    """Configuration for the waypoint command generator.
+    """Configuration for waypoint command generator.
     
-    This command generator samples a sequence of 2D waypoints (x, y) within a 
-    configurable radius and provides them to the policy for navigation.
-    
-    The z-axis is included for compatibility but set to ground level for 
-    wheeled robots.
-    
-    Spacing Scenarios:
-        The generator supports multiple spacing scenarios to create diverse training
-        environments. Each scenario defines a spacing range and sampling weight.
-        
-        - When `per_waypoint_spacing=True`: Each waypoint independently samples a 
-          scenario, creating natural mixed environments (some close, some far).
-        - When `per_waypoint_spacing=False`: Each environment samples one scenario 
-          applied to all its waypoints (uniform spacing within each episode).
+    Samples 2D waypoints (x, y) for navigation. Z-axis set to ground level.
+    Supports multiple spacing scenarios for diverse training.
     """
 
     class_type: type = WaypointCommand
@@ -82,58 +62,39 @@ class WaypointCommandCfg(CommandTermCfg):
     """Distance range for the first waypoint from the robot's starting position."""
     
     waypoint_reach_threshold: float = 0.25
-    """Distance threshold (in meters) to consider a waypoint as reached.
-    Set slightly larger for wheeled robots due to their larger turning radius."""
+    """Distance threshold (meters) to consider a waypoint reached."""
     
     num_lookahead_waypoints: int = 1
     """Number of future waypoints to include in the observation."""
     
-    # Dynamic spacing configuration
     spacing_scenarios: list[SpacingScenarioCfg] = field(default_factory=lambda: [
-        SpacingScenarioCfg(spacing_range=(0.5, 1.0), weight=1.0),     # Close: tight navigation
-        SpacingScenarioCfg(spacing_range=(1.0, 2.0), weight=1.5),     # Medium: balanced
-        SpacingScenarioCfg(spacing_range=(2.0, 3.0), weight=1.0),     # Far: longer distances
-        SpacingScenarioCfg(spacing_range=(3.0, 5.0), weight=0.5),     # Very Far: challenging distance
-        SpacingScenarioCfg(spacing_range=(0.5, 3.0), weight=1.5),     # Mixed: close-to-far range
+        SpacingScenarioCfg(spacing_range=(0.5, 1.0), weight=1.0),
+        SpacingScenarioCfg(spacing_range=(1.0, 2.0), weight=1.5),
+        SpacingScenarioCfg(spacing_range=(2.0, 3.0), weight=1.0),
+        SpacingScenarioCfg(spacing_range=(3.0, 5.0), weight=0.5),
+        SpacingScenarioCfg(spacing_range=(5.5, 8.0), weight=100.0),
     ])
-    """List of spacing scenarios for diverse training environments.
-    
-    Default scenarios cover a wide range (0.5m - 5.0m) suitable for wheeled robots:
-    - Close (0.5-1.0m): Tests precise maneuvering
-    - Medium (1.0-2.0m): Balanced navigation challenges
-    - Far (2.0-3.0m): Longer traversal between waypoints
-    - Very Far (3.0-5.0m): Tests sustained driving
-    - Mixed (0.5-3.0m): Combines close and far in a single range
-    
-    Set to empty list [] to use legacy waypoint_spacing instead.
-    """
+    """Spacing scenarios for diverse training (0.5-5.0m range). Empty list uses legacy waypoint_spacing."""
     
     per_waypoint_spacing: bool = True
-    """Whether to sample spacing scenario independently for each waypoint.
+    """If True, each waypoint samples its scenario independently. If False, one scenario per episode."""
     
-    - True: Each waypoint samples its own scenario, creating mixed environments
-            where some waypoints are close and others are far apart.
-    - False: Each environment samples one scenario at reset, applied uniformly
-             to all waypoints in that episode.
-    """
+    use_envs_nav_waypoints: bool = False
+    """If True, use waypoints from envs-nav scene config (gen_waypoints method) instead of random sampling.
+    Requires the environment to have _scene_cfg with gen_waypoints method (e.g., waypoint-benchmark-v1)."""
 
     @configclass
     class Ranges:
         """Ranges for waypoint generation."""
         
         angle_range: tuple[float, float] = (-2.5, 2.5)
-        """Angle range (in radians) for sampling next waypoint direction relative to heading. 
-        Slightly restricted from full circle to encourage more forward-facing waypoints
-        (better for wheeled vehicles with limited turning radius)."""
+        """Angle range (radians) for next waypoint direction relative to heading."""
         
         z_offset_range: tuple[float, float] = (0.0, 0.0)
-        """Z offset range (in meters) relative to robot base height. 
-        Set to zero for flat ground navigation."""
+        """Z offset range (meters) relative to robot base height."""
 
     ranges: Ranges = Ranges()
 
-    # Visualization settings - colored spheres
     waypoint_visualizer_cfg: VisualizationMarkersCfg = WAYPOINT_MARKER_CFG
-    """The configuration for waypoint visualization markers.
-    Uses red spheres for current target and green spheres for future waypoints."""
+    """Waypoint visualization: red for current target, green for future waypoints."""
 
