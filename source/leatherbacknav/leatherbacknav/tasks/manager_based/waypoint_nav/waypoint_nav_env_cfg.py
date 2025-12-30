@@ -50,11 +50,9 @@ from leatherbacknav.robots import LEATHERBACK_CFG  # isort: skip
 class WaypointNavSceneCfg(InteractiveSceneCfg):
     """Configuration for the waypoint navigation scene."""
 
-    # ground terrain - using simple plane (matches original Leatherback project)
-    # This prevents the initial "hopping" that occurs with mesh-based terrain
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
-        terrain_type="plane",  # Simple plane instead of mesh generator
+        terrain_type="plane",
         max_init_terrain_level=None,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -62,15 +60,12 @@ class WaypointNavSceneCfg(InteractiveSceneCfg):
             restitution_combine_mode="multiply",
             static_friction=1.0,
             dynamic_friction=1.0,
-            restitution=0.0,  # No bounce!
+            restitution=0.0,
         ),
         debug_vis=False,
     )
 
-    # robot
     robot: ArticulationCfg = LEATHERBACK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-
-    # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
         spawn=sim_utils.DomeLightCfg(
@@ -85,9 +80,9 @@ class WaypointNavSceneCfg(InteractiveSceneCfg):
 ##
 
 
-# Create waypoint ranges outside the class to avoid it becoming a class attribute
+# Waypoint ranges (~±143 degrees, slightly restricted for wheeled vehicles)
 _WAYPOINT_RANGES = mdp.WaypointCommandCfg.Ranges()
-_WAYPOINT_RANGES.angle_range = (-2.5, 2.5)  # ~±143 degrees (slightly restricted for wheeled vehicles)
+_WAYPOINT_RANGES.angle_range = (-2.5, 2.5)
 
 
 @configclass
@@ -96,11 +91,11 @@ class CommandsCfg:
 
     waypoints = mdp.WaypointCommandCfg(
         asset_name="robot",
-        resampling_time_range=(1e9, 1e9),  # Effectively never auto-resample
+        resampling_time_range=(1e9, 1e9),  # Never auto-resample
         num_waypoints=5,
         waypoint_spacing=(0.5, 3.0),
         initial_waypoint_distance=(0.5, 2.0),
-        waypoint_reach_threshold=0.10,  # Larger threshold for wheeled robots
+        waypoint_reach_threshold=0.10,
         num_lookahead_waypoints=1,
         debug_vis=True,
         ranges=_WAYPOINT_RANGES,
@@ -109,28 +104,17 @@ class CommandsCfg:
 
 @configclass
 class ActionsCfg:
-    """Action specifications for the MDP.
-    
-    The Leatherback uses:
-    - Throttle: Velocity control for all 4 wheels (joint velocity action)
-    - Steering: Position control for front wheel knuckles (joint position action)
-    """
+    """Action specifications: throttle (wheel velocities) and steering (front wheel angles)."""
 
-    # Throttle control (wheel velocities)
-    # Original uses scale=10 with max=50, policy outputs [-1, 1]
     throttle = mdp.JointVelocityActionCfg(
         asset_name="robot",
         joint_names=["Wheel.*"],
-        scale=10.0,  # Scale for wheel velocity (matches original)
+        scale=10.0,
     )
-    
-    # Steering control (front wheel angles)
-    # CRITICAL: Original uses scale=0.01 with max=0.75
-    # Using 0.5 was 50x too large, causing instability!
     steering = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=["Knuckle__Upright__Front.*"],
-        scale=0.75,  # Max steering angle (radians) - matches original max
+        scale=0.75,
         use_default_offset=True,
     )
 
@@ -143,7 +127,6 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
 
-        # Robot state observations
         base_lin_vel = ObsTerm(
             func=mdp.base_lin_vel,
             params={"asset_cfg": SceneEntityCfg("robot")},
@@ -170,8 +153,6 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.5, n_max=0.5),
         )
         actions = ObsTerm(func=mdp.last_action)
-
-        # Waypoint observations
         waypoint_commands = ObsTerm(
             func=mdp.waypoint_commands,
             params={"command_name": "waypoints"},
@@ -189,7 +170,6 @@ class ObservationsCfg:
             self.enable_corruption = True
             self.concatenate_terms = True
 
-    # observation groups
     policy: PolicyCfg = PolicyCfg()
 
 
@@ -197,24 +177,13 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    # NOTE: Domain randomization events commented out for initial development.
-    # Re-enable these later for robust sim-to-real transfer training.
-    
-    # reset
     reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
-            "velocity_range": {
-                "x": (0.0, 0.0),
-                "y": (0.0, 0.0),
-                "z": (0.0, 0.0),
-                "roll": (0.0, 0.0),
-                "pitch": (0.0, 0.0),
-                "yaw": (0.0, 0.0),
-            },
+            "velocity_range": {k: (0.0, 0.0) for k in ["x", "y", "z", "roll", "pitch", "yaw"]},
         },
     )
 
@@ -231,52 +200,33 @@ class EventCfg:
 
 @configclass
 class RewardsCfg:
-    """Reward terms for the MDP.
-    
-    Based on original Leatherback reward structure:
-    - position_progress (delta-based): weight=1.0
-    - target_heading: weight=0.05  
-    - goal_reached: bonus=10.0
-    """
+    """Reward terms: progress (1.0), heading (0.05), waypoint bonus (10.0)."""
 
-    # Bonus for reaching waypoints (same as original)
     waypoint_reached = RewTerm(
         func=mdp.waypoint_reached_bonus,
         weight=10.0,
         params={"command_name": "waypoints", "bonus": 1.0},
     )
-    
-    # Progress toward waypoint - DELTA-BASED (previous_dist - current_dist)
-    # This is the PRIMARY movement incentive - must be the dominant reward!
     progress = RewTerm(
         func=mdp.progress_reward,
-        weight=1.0,  # Matches original position_progress_weight
+        weight=1.0,
         params={"command_name": "waypoints", "asset_cfg": SceneEntityCfg("robot")},
     )
-    
-    # Reward for facing the waypoint
     waypoint_heading = RewTerm(
         func=mdp.waypoint_heading_reward,
-        weight=0.05,  # Matches original heading_progress_weight=0.05
+        weight=0.05,
         params={"command_name": "waypoints", "std": 0.25},
     )
-    
-    # NOTE: No forward_velocity reward! The original Leatherback doesn't have it.
-    # Adding it causes reward hacking - robot learns to drive in circles
-    # instead of reaching waypoints. The delta-based progress reward is sufficient.
 
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # Success termination: all waypoints reached
     all_waypoints_reached = DoneTerm(
         func=mdp.all_waypoints_reached,
         params={"command_name": "waypoints"},
     )
-
-    # Failure terminations
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     flipped_over = DoneTerm(
         func=mdp.flipped_over,
@@ -293,31 +243,19 @@ class TerminationsCfg:
 class WaypointNavEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the Leatherback waypoint navigation environment."""
 
-    # Scene settings
     scene: WaypointNavSceneCfg = WaypointNavSceneCfg(num_envs=4096, env_spacing=5.0)
-
-    # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     commands: CommandsCfg = CommandsCfg()
-
-    # MDP settings
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-
-    # Viewer
     viewer = ViewerCfg(eye=(10.0, 10.0, 5.0), origin_type="world", env_index=0, asset_name="robot")
 
     def __post_init__(self):
-        """Post initialization."""
-        # General settings
         self.decimation = 4
-        self.episode_length_s = 30.0  # Allow enough time to reach all waypoints
-        
-        # Simulation settings - match original Leatherback project
-        # Using 1/60 physics timestep prevents initial hopping/settling issues
-        self.sim.dt = 1.0 / 60.0  # 60 Hz physics (matches original Leatherback)
+        self.episode_length_s = 30.0
+        self.sim.dt = 1.0 / 60.0
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
 
@@ -327,16 +265,9 @@ class WaypointNavEnvCfg_PLAY(WaypointNavEnvCfg):
     """Configuration for playing/evaluating the trained policy."""
 
     def __post_init__(self) -> None:
-        # Post init of parent
         super().__post_init__()
-
-        # Make a smaller scene for play
         self.scene.num_envs = 50
         self.scene.env_spacing = 5.0
-
-        # Disable randomization for play
         self.observations.policy.enable_corruption = False
-
-        # Longer episode for demo
         self.episode_length_s = 60.0
 
