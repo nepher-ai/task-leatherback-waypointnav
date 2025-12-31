@@ -171,7 +171,6 @@ class EnvNavWaypointSampler(WaypointSampler):
                 "for EnvNavWaypointSampler"
             )
         
-        self.scene_idx = 0
 
     def sample_waypoints(
         self, 
@@ -236,12 +235,13 @@ class EnvNavWaypointSampler(WaypointSampler):
                 # Log warning but continue with waypoint sampling
                 warnings.warn(f"Failed to reset robot position using gen_bot_init_pos/gen_bot_random_pos: {e}")
 
+        robot_pos_z = self.robot.data.root_pos_w[env_ids_tensor, 2].clone()
+
         if hasattr(self.scene_cfg, "gen_waypoints"):
             generated_waypoints, num_waypoints_per_env_tensor = self.scene_cfg.gen_waypoints(
                 env_ids=env_ids_tensor,
                 env_origins=env_origins,
                 device=self.device,
-                scene_idx=self.scene_idx
             )
 
         elif hasattr(self.scene_cfg, "gen_random_waypoints"):
@@ -257,10 +257,10 @@ class EnvNavWaypointSampler(WaypointSampler):
                 "scene_cfg does not have gen_waypoints or gen_random_waypoints method"
             )
         
-        self.scene_idx += 1
 
         # Copy generated waypoints to output buffer
         max_num_waypoints = generated_waypoints.shape[1]
+        generated_waypoints[:, :, 2] = robot_pos_z.unsqueeze(1)
         generated_waypoints = generated_waypoints[:, :max_num_waypoints]
         waypoints_w[env_ids_tensor, :max_num_waypoints, :3] = generated_waypoints
         num_waypoints_per_env[env_ids_tensor] = num_waypoints_per_env_tensor
