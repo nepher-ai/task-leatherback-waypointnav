@@ -260,7 +260,7 @@ class EnvNavWaypointSampler(WaypointSampler):
 
         # Copy generated waypoints to output buffer
         max_num_waypoints = generated_waypoints.shape[1]
-        generated_waypoints[:, :, 2] = robot_pos_z.unsqueeze(1)
+        generated_waypoints[:, :, 2] = 0.1
         generated_waypoints = generated_waypoints[:, :max_num_waypoints]
         waypoints_w[env_ids_tensor, :max_num_waypoints, :3] = generated_waypoints
         num_waypoints_per_env[env_ids_tensor] = num_waypoints_per_env_tensor

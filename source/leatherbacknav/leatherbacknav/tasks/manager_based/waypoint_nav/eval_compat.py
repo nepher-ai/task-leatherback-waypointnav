@@ -3,17 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Evaluation compatibility wrapper for wheeled-waypoint-eval framework.
+"""Evaluation compatibility wrapper for waypoint navigation environments.
 
 This module provides a wrapper that exposes the manager-based environment's
-internal state in a format compatible with the wheeled-waypoint-eval adapter.
-
-Usage:
-    from leatherbacknav.tasks.manager_based.waypoint_nav.eval_compat import EvalCompatEnv
-    
-    # Wrap your environment
-    env = gym.make("Nepher-Leatherback-WaypointNav-v0", cfg=env_cfg)
-    eval_env = EvalCompatEnv(env)
+internal state in a format compatible with evaluation frameworks.
 """
 
 from __future__ import annotations
@@ -27,33 +20,11 @@ if TYPE_CHECKING:
 
 
 class EvalCompatEnv:
-    """Wrapper that adds evaluation framework compatibility attributes.
-    
-    This wrapper exposes internal state from the manager-based environment
-    in the format expected by the wheeled-waypoint-eval LeatherbackAdapter.
-    
-    The adapter expects these attributes on env.unwrapped:
-        - _target_positions: World-frame waypoint positions
-        - _markers_pos: Marker positions for visualization
-        - _target_index: Current waypoint index per environment
-        - _num_waypoints: Number of waypoints per environment
-        - _num_goals: Total waypoint capacity
-        - task_completed: Success flag per environment
-        - leatherback: Robot articulation reference
-        - waypoints: Visualization markers
-        - device: Torch device
-    """
+    """Wrapper that exposes environment state for evaluation frameworks."""
     
     def __init__(self, env: "ManagerBasedRLEnv"):
-        """Initialize the evaluation compatibility wrapper.
-        
-        Args:
-            env: The manager-based RL environment to wrap.
-        """
         self._env = env
-        self._waypoint_command = None
-        # Store reference to self on the underlying env for adapter discovery
-        self._env.unwrapped._eval_compat_wrapper = self
+        self._waypoint_term = None
     
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to the wrapped environment."""
@@ -61,165 +32,108 @@ class EvalCompatEnv:
     
     @property
     def unwrapped(self):
-        """Return the actual unwrapped environment (for RslRlVecEnvWrapper compatibility)."""
+        """Return the unwrapped environment."""
         return self._env.unwrapped
     
-    @property
-    def _waypoint_term(self):
-        """Lazily get the waypoint command term."""
-        if self._waypoint_command is None:
-            # Try to get the waypoint command from the command manager
+    def _get_waypoint_term(self):
+        """Get the waypoint command term."""
+        if self._waypoint_term is None:
             try:
-                self._waypoint_command = self._env.unwrapped.command_manager.get_term("waypoints")
+                cmd_manager = self._env.unwrapped.command_manager
+                self._waypoint_term = cmd_manager.get_term("waypoints")
             except (AttributeError, KeyError):
-                # Fallback: search for waypoint-related command
-                for term_name in self._env.unwrapped.command_manager.active_terms:
-                    term = self._env.unwrapped.command_manager.get_term(term_name)
+                for term_name in cmd_manager.active_terms:
+                    term = cmd_manager.get_term(term_name)
                     if hasattr(term, "waypoints_w"):
-                        self._waypoint_command = term
+                        self._waypoint_term = term
                         break
-        return self._waypoint_command
+        return self._waypoint_term
     
-    # ============== Evaluation Adapter Compatibility Properties ==============
+    def _get_attr(self, attr_name: str, default_factory):
+        """Generic attribute getter with fallback."""
+        term = self._get_waypoint_term()
+        if term is not None and hasattr(term, attr_name):
+            return getattr(term, attr_name)
+        return default_factory()
     
     @property
     def _target_positions(self) -> torch.Tensor:
-        """World-frame waypoint target positions.
-        
-        Shape: (num_envs, num_waypoints, 3)
-        """
-        if self._waypoint_term is not None:
-            return self._waypoint_term.waypoints_w
-        return torch.zeros(self._env.num_envs, 1, 3, device=self.device)
-    
-    @_target_positions.setter
-    def _target_positions(self, value: torch.Tensor):
-        """Allow setting target positions for evaluation scenarios."""
-        if self._waypoint_term is not None:
-            self._waypoint_term.waypoints_w[:] = value
+        """World-frame waypoint positions."""
+        return self._get_attr("waypoints_w", lambda: torch.zeros(self._env.num_envs, 1, 3, device=self.device))
     
     @property
     def _markers_pos(self) -> torch.Tensor:
-        """Marker positions for waypoint visualization.
-        
-        Shape: (num_envs, num_waypoints, 3)
-        """
-        if self._waypoint_term is not None:
-            return self._waypoint_term._markers_pos
-        return torch.zeros(self._env.num_envs, 1, 3, device=self.device)
-    
-    @_markers_pos.setter
-    def _markers_pos(self, value: torch.Tensor):
-        """Allow setting marker positions for visualization."""
-        if self._waypoint_term is not None:
-            self._waypoint_term._markers_pos[:] = value
+        """Marker positions for visualization."""
+        return self._get_attr("_markers_pos", lambda: torch.zeros(self._env.num_envs, 1, 3, device=self.device))
     
     @property
     def _target_index(self) -> torch.Tensor:
-        """Current target waypoint index for each environment.
-        
-        Shape: (num_envs,)
-        """
-        if self._waypoint_term is not None:
-            return self._waypoint_term.current_waypoint_idx
-        return torch.zeros(self._env.num_envs, dtype=torch.long, device=self.device)
-    
-    @_target_index.setter
-    def _target_index(self, value: torch.Tensor):
-        """Allow setting target index for evaluation scenarios."""
-        if self._waypoint_term is not None:
-            self._waypoint_term.current_waypoint_idx[:] = value
+        """Current waypoint index per environment."""
+        return self._get_attr("current_waypoint_idx", lambda: torch.zeros(self._env.num_envs, dtype=torch.long, device=self.device))
     
     @property
     def _num_waypoints(self) -> torch.Tensor:
-        """Number of active waypoints per environment.
-        
-        Shape: (num_envs,)
-        Returns the per-environment waypoint count from the waypoint command term.
-        """
-        if self._waypoint_term is not None:
-            # Return the per-environment waypoint count tensor
-            return self._waypoint_term.num_waypoints_per_env
-        return torch.ones(self._env.num_envs, dtype=torch.long, device=self.device)
-    
-    @_num_waypoints.setter
-    def _num_waypoints(self, value: torch.Tensor | int):
-        """Set per-environment waypoint counts (for variable waypoint scenarios).
-        
-        Args:
-            value: Either a tensor of per-env counts, or a single int to set for all envs.
-        """
-        if self._waypoint_term is not None:
-            if isinstance(value, int):
-                self._waypoint_term.num_waypoints_per_env[:] = value
-            else:
-                self._waypoint_term.num_waypoints_per_env[:] = value
+        """Number of waypoints per environment."""
+        return self._get_attr("num_waypoints_per_env", lambda: torch.ones(self._env.num_envs, dtype=torch.long, device=self.device))
     
     @property
     def _num_goals(self) -> int:
-        """Total waypoint capacity (maximum number of waypoints supported)."""
-        if self._waypoint_term is not None:
-            return self._waypoint_term.cfg.num_waypoints
-        return 1
+        """Total waypoint capacity."""
+        term = self._get_waypoint_term()
+        return term.cfg.num_waypoints if term is not None else 1
     
     @property
     def task_completed(self) -> torch.Tensor:
-        """Flag indicating task completion (all waypoints reached) per environment.
-        
-        Shape: (num_envs,)
-        """
-        if self._waypoint_term is not None:
-            return self._waypoint_term.all_waypoints_reached
-        return torch.zeros(self._env.num_envs, dtype=torch.bool, device=self.device)
+        """Task completion flag per environment."""
+        return self._get_attr("all_waypoints_reached", lambda: torch.zeros(self._env.num_envs, dtype=torch.bool, device=self.device))
     
     @property
-    def leatherback(self):
-        """Robot articulation reference (aliased for adapter compatibility).
+    def task_failed(self) -> torch.Tensor:
+        """Task failure flag per environment.
         
-        The adapter expects 'leatherback' but our environment uses 'robot'.
+        Returns True if any failure condition is met (timeout, flipped_over, etc.)
+        but task was not completed. This excludes success conditions.
         """
+        failure = torch.zeros(self._env.num_envs, dtype=torch.bool, device=self.device)
+        
+        try:
+            term_manager = self._env.unwrapped.termination_manager
+            if term_manager is not None:
+                # Check for failure conditions (excluding success)
+                failure_terms = ["time_out", "flipped_over"]
+                for term_name in failure_terms:
+                    try:
+                        term_value = term_manager.get_term(term_name)
+                        failure = failure | term_value
+                    except (KeyError, AttributeError):
+                        # Term doesn't exist, skip it
+                        pass
+        except (AttributeError, KeyError):
+            # Termination manager not available, return zeros
+            pass
+        
+        return failure
+    
+    @property
+    def robot(self):
+        """Robot articulation reference."""
         return self._env.unwrapped.scene["robot"]
     
     @property
     def waypoints(self):
         """Waypoint visualization markers."""
-        if self._waypoint_term is not None and hasattr(self._waypoint_term, "waypoint_visualizer"):
-            return self._waypoint_term.waypoint_visualizer
-        return None
+        term = self._get_waypoint_term()
+        return getattr(term, "waypoint_visualizer", None) if term is not None else None
     
     @property
     def device(self) -> torch.device:
-        """Torch device for the environment."""
+        """Torch device."""
         return self._env.unwrapped.device
-    
-    @property
-    def num_envs(self) -> int:
-        """Number of parallel environments."""
-        return self._env.unwrapped.num_envs
-    
-    @property
-    def step_dt(self) -> float:
-        """Simulation time per environment step."""
-        return self._env.unwrapped.step_dt
-    
-    @property
-    def physics_dt(self) -> float:
-        """Physics simulation timestep."""
-        return self._env.unwrapped.physics_dt
-    
-    @property
-    def cfg(self):
-        """Environment configuration."""
-        return self._env.unwrapped.cfg
-    
-    # ============== Environment Interface Methods ==============
     
     def reset(self, *args, **kwargs):
         """Reset the environment."""
-        result = self._env.reset(*args, **kwargs)
-        # Clear cached waypoint term to re-fetch after reset
-        self._waypoint_command = None
-        return result
+        self._waypoint_term = None
+        return self._env.reset(*args, **kwargs)
     
     def step(self, action):
         """Step the environment."""
@@ -233,25 +147,146 @@ class EvalCompatEnv:
         """Render the environment."""
         if hasattr(self._env, "render"):
             return self._env.render(*args, **kwargs)
+    
+    def _log_state(self, env_idx: int | None = None, info: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Extract complete robot state for logging.
+        
+        This method centralizes all state extraction logic for the evaluation framework.
+        It extracts robot position/orientation, waypoints, goals, and additional info.
+        
+        Args:
+            env_idx: Environment index (for vectorized envs). If None, uses env 0.
+            info: Info dictionary from environment step.
+            
+        Returns:
+            Dictionary containing all logged state data:
+            - position: [x, y, z] in world frame
+            - quat_w: quaternion w component
+            - current_waypoint_idx: current waypoint index
+            - all_waypoints_reached: whether all waypoints are reached
+            - task_completed: task completion flag (all waypoints reached)
+            - task_failed: task failure flag (timeout, flipped_over, etc.)
+            - success, timeout: from info dict (if available)
+        """
+        state = {}
+        idx = env_idx if env_idx is not None else 0
+        
+        try:
+            # Extract robot position and orientation
+            robot = self.robot
+            if robot is not None:
+                pos_w = robot.data.root_pos_w
+                quat_w = robot.data.root_quat_w
+                
+                # Optimize: single indexing operation, batch CPU conversion
+                if torch.is_tensor(pos_w):
+                    state["position"] = pos_w[idx, :3].cpu().numpy()
+                else:
+                    state["position"] = pos_w[idx, :3]
+                
+                quat_w_val = quat_w[idx] if torch.is_tensor(quat_w) else quat_w
+                if torch.is_tensor(quat_w_val):
+                    state["quat_w"] = float(quat_w_val[0].cpu().item())
+                else:
+                    state["quat_w"] = float(quat_w_val[0])
+            
+            # Optimize: get waypoint term once and reuse
+            term = self._get_waypoint_term()
+            if term is not None:
+                # Extract waypoint data directly (avoid redundant method call)
+                if hasattr(term, "current_waypoint_idx"):
+                    current_idx = term.current_waypoint_idx
+                    if torch.is_tensor(current_idx):
+                        state["current_waypoint_idx"] = int(current_idx[idx].cpu().item())
+                    else:
+                        state["current_waypoint_idx"] = int(current_idx[idx])
+                
+                if hasattr(term, "all_waypoints_reached"):
+                    all_reached = term.all_waypoints_reached
+                    if torch.is_tensor(all_reached):
+                        if all_reached.numel() == 1:
+                            state["all_waypoints_reached"] = bool(all_reached.cpu().item())
+                        else:
+                            state["all_waypoints_reached"] = bool(all_reached[idx].cpu().item())
+                    else:
+                        state["all_waypoints_reached"] = bool(all_reached[idx])
+            
+            # Extract task completion/failure status
+            task_completed_val = self.task_completed
+            if torch.is_tensor(task_completed_val):
+                if task_completed_val.numel() == 1:
+                    state["task_completed"] = bool(task_completed_val.cpu().item())
+                else:
+                    state["task_completed"] = bool(task_completed_val[idx].cpu().item())
+            else:
+                state["task_completed"] = bool(task_completed_val)
+            
+            task_failed_val = self.task_failed
+            if torch.is_tensor(task_failed_val):
+                if task_failed_val.numel() == 1:
+                    state["task_failed"] = bool(task_failed_val.cpu().item())
+                else:
+                    state["task_failed"] = bool(task_failed_val[idx].cpu().item())
+            else:
+                state["task_failed"] = bool(task_failed_val)
+            
+            # Extract info fields
+            if info:
+                for key in ["success", "timeout"]:
+                    if key in info:
+                        val = info[key]
+                        if torch.is_tensor(val):
+                            if val.numel() == 1:
+                                state[key] = float(val.cpu().item())
+                            else:
+                                state[key] = float(val[idx].cpu().item())
+                        else:
+                            state[key] = val
+        except Exception:
+            pass
+        
+        return state
+    
+    
+    def _log_metadata(self, env_idx: int | None = None) -> dict[str, Any] | None:
+        """Extract metadata information for logging.
+        
+        Args:
+            env_idx: Environment index (for vectorized envs). If None, uses env 0.
+            
+        Returns:
+            Dictionary containing metadata data or None.
+        """
+        waypoints = self._get_waypoint_pos(env_idx)
+        return {"waypoints": waypoints} if waypoints else None
 
+    def _get_waypoint_pos(self, env_idx: int | None = None) -> dict[str, Any] | None:
+        """Extract waypoint data for logging.
+        
+        Args:
+            env_idx: Environment index (for vectorized envs). If None, uses env 0.
+            
+        Returns:
+            Dictionary containing waypoint data or None.
+        """
+        term = self._get_waypoint_term()
+        if term is None:
+            return None
+        
+        waypoints_data = {}
+        idx = env_idx if env_idx is not None else 0
+        
+        # Get waypoint positions in world frame
+        if hasattr(term, "waypoints_w"):
+            waypoints_w = term.waypoints_w
+            if torch.is_tensor(waypoints_w):
+                waypoints_data["waypoints_world"] = waypoints_w[idx].cpu().numpy()
+            else:
+                waypoints_data["waypoints_world"] = waypoints_w[idx]
+        
+        return waypoints_data if waypoints_data else None
 
 def wrap_for_eval(env: "ManagerBasedRLEnv") -> EvalCompatEnv:
-    """Convenience function to wrap an environment for evaluation.
-    
-    Args:
-        env: The manager-based RL environment to wrap.
-        
-    Returns:
-        Wrapped environment with evaluation compatibility attributes.
-        
-    Example:
-        import gymnasium as gym
-        from leatherbacknav.tasks.manager_based.waypoint_nav.eval_compat import wrap_for_eval
-        
-        env = gym.make("Nepher-Leatherback-WaypointNav-v0", cfg=env_cfg)
-        eval_env = wrap_for_eval(env)
-        
-        # Now eval_env is compatible with wheeled-waypoint-eval
-    """
+    """Wrap an environment for evaluation."""
     return EvalCompatEnv(env)
 
