@@ -72,12 +72,12 @@ def build_scene_with_preset(base_scene: WaypointNavSceneCfg, preset_cfg: Any, nu
 
 @configclass
 class WaypointNavEnvCfg_EnvsNav(WaypointNavEnvCfg):
-    """Self-contained config for envs-nav waypoint-benchmark-v1.
+    """Self-contained config for envs-nav waypoint-example-v1.
     
     Automatically loads terrain, waypoints, and robot reset positions from preset.
     """
     
-    nav_env_id: str = "waypoint-benchmark-v1"
+    nav_env_id: str = "waypoint-example-v1"
     nav_scene: str | int = 0
     _scene_cfg: Any = None
     
