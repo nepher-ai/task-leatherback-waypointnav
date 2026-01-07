@@ -6,6 +6,11 @@
 
 This project implements a **waypoint navigation task** for the Leatherback wheeled robot in Isaac Lab. The task trains a policy to navigate the robot through a sequence of 3D waypoints using low-level throttle and steering control.
 
+## Requirements
+
+- **Isaac Lab**: 2.3.0
+- **Isaac Sim**: 5.1
+
 ## Installation
 
 1. Install Isaac Lab following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
