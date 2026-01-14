@@ -3,19 +3,19 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Configuration for using envs-nav waypoint-benchmark-v1 environment.
+"""Configuration for using envhub (nepher) waypoint-benchmark-v1 environment.
 
 This config is self-contained and automatically loads the waypoint-benchmark-v1
 environment with terrain and waypoints from the preset configuration.
 
 Usage:
-    from leatherbacknav.tasks.manager_based.waypoint_nav.waypoint_nav_env_cfg_envs_nav import WaypointNavEnvCfg_EnvsNav
+    from leatherbacknav.tasks.manager_based.waypoint_nav.waypoint_nav_env_cfg_envhub import WaypointNavEnvCfg_Envhub
     
-    cfg = WaypointNavEnvCfg_EnvsNav()
-    env = gym.make("Nepher-Leatherback-WaypointNav-v0", cfg=cfg)
+    cfg = WaypointNavEnvCfg_Envhub()
+    env = gym.make("Nepher-Leatherback-WaypointNav-Envhub-v0", cfg=cfg)
     
     # Or customize the scene:
-    cfg = WaypointNavEnvCfg_EnvsNav(nav_scene=1)  # Use different scenario
+    cfg = WaypointNavEnvCfg_Envhub(nav_scene=1)  # Use different scenario
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def _create_scene_class(terrain_cfg: Any, name: str, base_class: type = Waypoint
 
 
 def build_scene_with_preset(base_scene: WaypointNavSceneCfg, preset_cfg: Any, num_envs: int) -> WaypointNavSceneCfg:
-    """Build scene with obstacles from envs-nav preset config.
+    """Build scene with obstacles from envhub (nepher) preset config.
     
     Args:
         base_scene: Base scene configuration to extend.
@@ -71,13 +71,13 @@ def build_scene_with_preset(base_scene: WaypointNavSceneCfg, preset_cfg: Any, nu
 
 
 @configclass
-class WaypointNavEnvCfg_EnvsNav(WaypointNavEnvCfg):
-    """Self-contained config for envs-nav waypoint-example-v1.
+class WaypointNavEnvCfg_Envhub(WaypointNavEnvCfg):
+    """Self-contained config for envhub (nepher) waypoint-benchmark-v1.
     
     Automatically loads terrain, waypoints, and robot reset positions from preset.
     """
     
-    nav_env_id: str = "waypoint-example-v1"
+    nav_env_id: str = "waypoint-benchmark-v1"
     nav_scene: str | int = 0
     _scene_cfg: Any = None
     
@@ -88,12 +88,16 @@ class WaypointNavEnvCfg_EnvsNav(WaypointNavEnvCfg):
         self.commands.waypoints.num_waypoints = self._scene_cfg.max_num_waypoints if self._scene_cfg else 5
     
     def _load_scene(self):
-        """Load envs-nav scene and configure environment."""
+        """Load envhub (nepher) scene and configure environment."""
         if not self.nav_env_id or self._scene_cfg:
             return
         
-        from envs_nav.lib.loader import load_cached_scene
-        self._scene_cfg = load_cached_scene(self.nav_env_id, self.nav_scene)
+        from nepher import load_env, load_scene
+        
+        # Load environment from cache (will raise error if not cached)
+        env = load_env(self.nav_env_id, category="navigation")
+        # Load scene config
+        self._scene_cfg = load_scene(env, self.nav_scene, category="navigation")
         preset_cfg = self._scene_cfg
         self.scene = build_scene_with_preset(self.scene, preset_cfg, self.scene.num_envs)
         self.scene.env_spacing = max(self.scene.env_spacing, preset_cfg.env_spacing)
@@ -103,7 +107,7 @@ class WaypointNavEnvCfg_EnvsNav(WaypointNavEnvCfg):
 
 
 @configclass
-class WaypointNavEnvCfg_EnvsNav_PLAY(WaypointNavEnvCfg_EnvsNav):
+class WaypointNavEnvCfg_Envhub_PLAY(WaypointNavEnvCfg_Envhub):
     """Play/evaluation config with fewer envs and no noise."""
     
     def __post_init__(self) -> None:
@@ -113,5 +117,4 @@ class WaypointNavEnvCfg_EnvsNav_PLAY(WaypointNavEnvCfg_EnvsNav):
         self.observations.policy.enable_corruption = False
         self.episode_length_s = 60.0
         self.commands.waypoints.use_envs_nav_waypoints = True
-
 

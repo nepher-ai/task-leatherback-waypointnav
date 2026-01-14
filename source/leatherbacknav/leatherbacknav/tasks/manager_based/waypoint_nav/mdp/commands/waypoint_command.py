@@ -153,7 +153,7 @@ class WaypointCommand(CommandTerm):
         msg += f"\tNumber of waypoints: {self.cfg.num_waypoints}\n"
         
         if self.cfg.use_envs_nav_waypoints:
-            msg += "\tMode: envs-nav waypoints (from scene config)\n"
+            msg += "\tMode: envhub (nepher) waypoints (from scene config)\n"
             if isinstance(self.sampler, EnvNavWaypointSampler):
                 msg += f"\tScene config: {getattr(self.sampler.scene_cfg, 'name', 'unknown')}\n"
         elif self.spacing_manager.use_scenarios:

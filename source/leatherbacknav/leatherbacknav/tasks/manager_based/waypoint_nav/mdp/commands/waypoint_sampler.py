@@ -141,7 +141,7 @@ class RandomWaypointSampler(WaypointSampler):
         num_waypoints_per_env[env_ids] = torch.tensor(self.cfg.num_waypoints, device=self.device)
 
 class EnvNavWaypointSampler(WaypointSampler):
-    """Waypoint sampler that uses waypoints from envs-nav scene config."""
+    """Waypoint sampler that uses waypoints from envhub (nepher) scene config."""
 
     def __init__(
         self, 
@@ -150,7 +150,7 @@ class EnvNavWaypointSampler(WaypointSampler):
         scene_cfg,
         get_env_origins,
     ):
-        """Initialize the envs-nav waypoint sampler.
+        """Initialize the envhub (nepher) waypoint sampler.
         
         Args:
             cfg: Configuration for waypoint command generator.
@@ -178,7 +178,7 @@ class EnvNavWaypointSampler(WaypointSampler):
         waypoints_w: torch.Tensor,
         num_waypoints_per_env: torch.Tensor
     ) -> None:
-        """Sample waypoints from envs-nav scene config.
+        """Sample waypoints from envhub (nepher) scene config.
         
         Args:
             env_ids: Environment indices to sample waypoints for.

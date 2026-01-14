@@ -80,7 +80,7 @@ class WaypointCommandCfg(CommandTermCfg):
     """If True, each waypoint samples its scenario independently. If False, one scenario per episode."""
     
     use_envs_nav_waypoints: bool = False
-    """If True, use waypoints from envs-nav scene config (gen_waypoints method) instead of random sampling.
+    """If True, use waypoints from envhub (nepher) scene config (gen_waypoints method) instead of random sampling.
     Requires the environment to have _scene_cfg with gen_waypoints method (e.g., waypoint-benchmark-v1)."""
 
     @configclass
