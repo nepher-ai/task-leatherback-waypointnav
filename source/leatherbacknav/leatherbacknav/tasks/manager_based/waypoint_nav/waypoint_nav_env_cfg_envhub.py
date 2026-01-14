@@ -15,7 +15,7 @@ Usage:
     env = gym.make("Nepher-Leatherback-WaypointNav-Envhub-v0", cfg=cfg)
     
     # Or customize the scene:
-    cfg = WaypointNavEnvCfg_Envhub(nav_scene=1)  # Use different scenario
+    cfg = WaypointNavEnvCfg_Envhub(scene_id=1)  # Use different scenario
 """
 
 from __future__ import annotations
@@ -77,28 +77,33 @@ class WaypointNavEnvCfg_Envhub(WaypointNavEnvCfg):
     Automatically loads terrain, waypoints, and robot reset positions from preset.
     """
     
-    nav_env_id: str = "waypoint-benchmark-v1"
-    nav_scene: str | int = 0
+    env_id: str = "waypoint-benchmark-v1"
+    scene_id: str | int = 0  # Scene ID (separate from base class 'scene' field which is the scene config object)
     _scene_cfg: Any = None
     
     def __post_init__(self):
+        # Store scene_id before calling super() to avoid conflict with base class 'scene' field
+        scene_id_value = self.scene_id
         super().__post_init__()
+        # Restore scene_id after super() may have overwritten it
+        self.scene_id = scene_id_value
         self._load_scene()
         self.commands.waypoints.use_envs_nav_waypoints = True
         self.commands.waypoints.num_waypoints = self._scene_cfg.max_num_waypoints if self._scene_cfg else 5
     
     def _load_scene(self):
         """Load envhub (nepher) scene and configure environment."""
-        if not self.nav_env_id or self._scene_cfg:
+        if not self.env_id or self._scene_cfg:
             return
         
         from nepher import load_env, load_scene
         
         # Load environment from cache (will raise error if not cached)
-        env = load_env(self.nav_env_id, category="navigation")
-        # Load scene config
-        self._scene_cfg = load_scene(env, self.nav_scene, category="navigation")
+        env = load_env(self.env_id, category="navigation")
+        # Load scene config using scene_id (not self.scene which is the scene config object)
+        self._scene_cfg = load_scene(env, self.scene_id, category="navigation")
         preset_cfg = self._scene_cfg
+        # Now build the actual scene config object and assign it to self.scene
         self.scene = build_scene_with_preset(self.scene, preset_cfg, self.scene.num_envs)
         self.scene.env_spacing = max(self.scene.env_spacing, preset_cfg.env_spacing)
         

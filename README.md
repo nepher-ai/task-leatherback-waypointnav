@@ -67,7 +67,7 @@ python scripts/rsl_rl/play.py --task=Nepher-Leatherback-WaypointNav-Envhub-Play-
 ```python
 from leatherbacknav.tasks.manager_based.waypoint_nav.waypoint_nav_env_cfg_envhub import WaypointNavEnvCfg_Envhub
 
-cfg = WaypointNavEnvCfg_Envhub(nav_scene=1)  # Use scene 1
+cfg = WaypointNavEnvCfg_Envhub(scene_id=1)  # Use scene 1
 env = gym.make("Nepher-Leatherback-WaypointNav-Envhub-v0", cfg=cfg)
 ```
 
