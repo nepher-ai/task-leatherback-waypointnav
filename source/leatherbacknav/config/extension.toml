@@ -8,8 +8,8 @@ category = "isaaclab"
 readme  = "README.md"
 
 title = "Leatherback Waypoint Navigation"
-author = "Nepher Team"
-maintainer = "Nepher Team"
+author = "Nepher AI"
+maintainer = "Nepher AI"
 description="Leatherback wheeled robot waypoint navigation task for Isaac Lab"
 repository = "https://github.com/isaac-sim/IsaacLab.git"
 keywords = ["leatherback", "navigation", "waypoint", "wheeled", "rover", "isaaclab"]

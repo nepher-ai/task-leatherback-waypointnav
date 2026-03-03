@@ -1,6 +1,6 @@
 # Leatherback Waypoint Navigation for Isaac Lab
 
-**Developed by Nepher Team**
+**Developed by Nepher AI — contact@nepher.ai**
 
 ## Overview
 
@@ -80,4 +80,10 @@ The Leatherback is a 4-wheeled rover-style robot with:
 The action space is 2D: `[throttle, steering]`
 
 See the configuration files in `source/leatherbacknav/leatherbacknav/tasks/manager_based/waypoint_nav/` for full details including observations, actions, rewards, and termination conditions.
+
+## License
+
+This project is licensed under the **BSD-3-Clause License**. See [LICENSE](LICENSE) for details.
+
+Copyright (c) 2025-2026, Nepher AI.
 
