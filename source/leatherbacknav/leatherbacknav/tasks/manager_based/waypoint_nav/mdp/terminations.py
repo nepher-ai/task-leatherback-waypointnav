@@ -11,6 +11,8 @@ including reaching all waypoints, flipping over, or timing out.
 
 from __future__ import annotations
 
+import math
+
 import torch
 from typing import TYPE_CHECKING
 
@@ -44,27 +46,26 @@ def all_waypoints_reached(
 def flipped_over(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    max_tilt_angle: float = 10.0,
 ) -> torch.Tensor:
-    """Terminate when the car has completely flipped upside down.
+    """Terminate when the car tilts beyond the maximum allowed angle.
     
-    This checks if the car is past 90 degrees (upside down) by looking at the
-    z-component of the projected gravity vector:
+    This checks the tilt via the z-component of the projected gravity vector:
     - When upright: projected_gravity_b[:, 2] ≈ -1 (gravity points down in body frame)
-    - When upside down: projected_gravity_b[:, 2] > 0 (gravity points up in body frame)
-    
-    This allows the car to climb steep ramps (any tilt angle < 90°) while still
-    terminating when it completely flips over.
+    - At max_tilt_angle degrees: projected_gravity_b[:, 2] = -cos(max_tilt_angle)
+    - When upside down: projected_gravity_b[:, 2] ≈ +1 (gravity points up in body frame)
     
     Args:
         env: The environment instance.
         asset_cfg: Configuration for the robot asset.
+        max_tilt_angle: Maximum tilt angle in degrees before termination. Defaults to 60.
         
     Returns:
         Boolean tensor of shape (num_envs,) indicating termination.
     """
     asset: RigidObject = env.scene[asset_cfg.name]
-    # Upside down when gravity points upward in the body frame (z > 0)
-    return asset.data.projected_gravity_b[:, 2] > 0
+    threshold = -math.cos(math.radians(max_tilt_angle))
+    return asset.data.projected_gravity_b[:, 2] > threshold
 
 
 def time_out(env: ManagerBasedRLEnv) -> torch.Tensor:

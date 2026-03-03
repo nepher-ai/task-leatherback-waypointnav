@@ -3,8 +3,8 @@ Name: leatherbacknav
 Version: 0.1.0
 Summary: Leatherback wheeled robot waypoint navigation task for Isaac Lab
 Home-page: https://github.com/isaac-sim/IsaacLab.git
-Author: Nepher Team
-Maintainer: Nepher Team
+Author: Nepher AI
+Maintainer: Nepher AI
 License: Apache-2.0
 Keywords: leatherback,navigation,waypoint,wheeled,rover,isaaclab
 Classifier: Natural Language :: English

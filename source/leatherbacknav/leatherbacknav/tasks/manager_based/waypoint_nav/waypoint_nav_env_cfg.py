@@ -226,6 +226,7 @@ class TerminationsCfg:
     all_waypoints_reached = DoneTerm(
         func=mdp.all_waypoints_reached,
         params={"command_name": "waypoints"},
+        time_out=True,
     )
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     flipped_over = DoneTerm(
